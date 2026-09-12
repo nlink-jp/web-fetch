@@ -569,6 +569,11 @@ Reason: 汎用のデータ取得プリミティブで、特定サービスの認
   この計測では現れていない。最悪ケースは算術上 18,000 + 封筒で収まる。
 - **rebinding 級フィクスチャ** `http://127.0.0.1.nip.io/` は loopback として拒否された
   （`address_not_allowed`、`via` 無し）。
+- **lagent との実往復（マイルストーンのランタイム側）**: lagent v0.3.0 + LM Studio
+  （Gemma 4 26B A4B QAT）、隔離 HOME / state、グローバル `mcp.json` に登録、
+  `--allow mcp__web-fetch__*` でプリロード。`mcp__web-fetch__fetch` 1 回、結果は退避されず
+  インライン（transcript に退避注記無し、`returned_chars` 6,000）、モデルは題名と最初の
+  見出しを正しく報告、one-shot 全体で 20 秒。
 - `http://go.dev/` → `https://go.dev/` の 1 ホップが `redirects` に記録される。
 - 抽出の実装で決めた細部（RFP に無かったもの）: `javascript:` と `data:` の href はリンクに
   しない（テキストのみ）; `<meta charset="utf-16">` は UTF-8 として扱う（WHATWG）; `<body>` に

@@ -138,10 +138,9 @@ code trips over.
 ## Status
 
 Phase 1 (core) complete: every package landed with tests, `make check` green,
-`make e2e` green (27 binary-level checks, 6 live tests, 1 optional skipped).
-Not yet: the lagent round trip (`mcp_load` → `fetch`) as a measured milestone,
-the first release, util-series integration, the mcp-tactics entry, the
-knowledge feed-back.
+`make e2e` green (27 binary-level checks, 6 live tests, 1 optional skipped),
+and the lagent round trip measured (Gotchas). Not yet: the first release,
+util-series integration, the mcp-tactics entry, the knowledge feed-back.
 
 ## Gotchas
 
@@ -172,9 +171,21 @@ this a year from now.
 - **A literal BOM character in Go source is a syntax error**; spell it
   `string(rune(0xFEFF))` in tests.
 
+- **lagent round trip (2026-09-12, lagent v0.3.0 + LM Studio Gemma 4 26B
+  A4B QAT, isolated HOME / state, web-fetch registered in the global
+  `mcp.json`, `--allow mcp__web-fetch__*` so the server is preloaded):** one
+  `mcp__web-fetch__fetch` call on the 日本語 article, the result held inline
+  (no "too large to hold inline" spill in the transcript, `returned_chars`
+  6,000), the model answered the title and first heading correctly; 20 s wall
+  clock for the whole one-shot. The runtime side of the milestone holds.
+  Registering the server only in a project `.mcp.json` needs the project
+  trusted first (`lagent trust --accept` after an interactive decision, or
+  `[approval].trusted_projects`); in the untrusted run the model's `mcp_load`
+  found no server, fell back to `curl` in the read lane seven times and then
+  invented an example answer — a lagent observation, not a web-fetch one.
+
 Open questions to answer with a date when measured:
 
-1. Does lagent render the default `fetch` of a Japanese page inline when
-   called through `mcp_load` → `fetch` (the runtime side of the milestone)?
-2. How many page turns does a typical documentation page cost a local model,
-   and does the bench want the default `max_chars` moved?
+1. How many page turns does a typical documentation page cost a local model,
+   and does the bench want the default `max_chars` moved? (Six turns for the
+   Go 1.26 notes, measured; the cost per turn is lagent's bench question.)

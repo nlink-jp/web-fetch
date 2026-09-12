@@ -631,6 +631,13 @@ as brave-search. lagent (lab-series) is a consumer, not the home.
   this measurement; it holds by arithmetic (18,000 + envelope).
 - **The rebinding-class fixture** `http://127.0.0.1.nip.io/` was refused as
   loopback (`address_not_allowed`, no `via`).
+- **The lagent round trip (the runtime side of the milestone)**: lagent
+  v0.3.0 + LM Studio (Gemma 4 26B A4B QAT), isolated HOME / state, the server
+  registered in the global `mcp.json`, preloaded with
+  `--allow mcp__web-fetch__*`. One `mcp__web-fetch__fetch` call, the result
+  held inline (no spill note in the transcript, `returned_chars` 6,000), the
+  model reported the title and first heading correctly, 20 s for the whole
+  one-shot.
 - `http://go.dev/` → `https://go.dev/`, one hop, recorded in `redirects`.
 - Extraction details settled in the implementation (absent from the RFP):
   `javascript:` and `data:` hrefs render as text only; `<meta

@@ -80,9 +80,9 @@ e2e/                    Live tests behind the `e2e` build tag
 
 ## Status
 
-Phase 1 (core) complete (2026-09-12): `make check` and `make e2e` green, no
-release yet. Next: the lagent round trip measurement, release, util-series
-integration, mcp-tactics entry, knowledge feed-back.
+Phase 1 (core) complete (2026-09-12): `make check` and `make e2e` green, the
+lagent round trip measured (AGENTS.md Gotchas), no release yet. Next: release,
+util-series integration, mcp-tactics entry, knowledge feed-back.
 
 ## Communication Language
 
