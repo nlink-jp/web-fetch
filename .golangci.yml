@@ -1,0 +1,17 @@
+version: "2"
+
+linters:
+  settings:
+    errcheck:
+      # Writes to the CLI's own stdout/stderr. There is nothing to do with the
+      # error — reporting a failed write to the stream that just failed is
+      # circular, and the process exit code already carries the outcome.
+      #
+      # This is the ONLY errcheck exclusion. Everything else stays on: an
+      # unchecked Close or a dropped read error on a fetched body is a real
+      # defect class in a tool whose whole job is reading bytes it does not
+      # control.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
