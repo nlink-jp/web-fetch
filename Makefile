@@ -17,7 +17,7 @@ PLATFORMS := \
 	darwin/arm64 \
 	windows/amd64
 
-.PHONY: build build-all test lint check package verify-release clean help
+.PHONY: build build-all test lint check e2e package verify-release clean help
 
 ## build: Build for the current platform
 build:
@@ -44,6 +44,11 @@ lint:
 
 ## check: Run lint + test + build-all
 check: lint test build-all
+
+## e2e: Live end-to-end tests against real sites (network required)
+e2e: build
+	go test -tags e2e -count=1 -v ./e2e/... 2>&1 | grep -E "^(=== RUN|--- |MEASURED|\s+live_test|ok|FAIL|PASS)" || true
+	@scripts/e2e.sh
 
 ## package: Build all platforms, archive with version suffix (zip for
 ## darwin/windows, tar.gz for linux), bundle the canonical binary +
