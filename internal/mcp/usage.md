@@ -1,8 +1,8 @@
 # web-fetch — MCP reference
 
 web-fetch fetches **one URL from this machine** and returns its body as
-extracted text. It is a primitive: it sends no cookies, no Authorization and no
-custom headers, follows no proxy, keeps nothing on disk, and never connects to
+extracted text. It is a primitive: it sends no cookies, no Authorization, no
+Referer and no custom headers, follows no proxy, keeps nothing on disk, and never connects to
 a loopback, private, link-local or otherwise reserved address (an
 `address_not_allowed` error says so). The site sees a visit from this machine's
 IP address, so this server is **not** for URLs under investigation — those

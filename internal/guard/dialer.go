@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net"
 	"net/netip"
-	"strings"
 
 	"github.com/nlink-jp/web-fetch/internal/toolerr"
 )
@@ -50,12 +49,12 @@ func (d *Dialer) connect() func(ctx context.Context, network, address string) (n
 // address denies the whole answer; a lookup that fails or answers with nothing
 // is dns_failed.
 func (d *Dialer) Vet(ctx context.Context, host string) ([]netip.Addr, error) {
-	if i := strings.IndexByte(host, '%'); i >= 0 {
-		host = host[:i] // an IPv6 zone does not change the address
-	}
 	var addrs []netip.Addr
 	if ip, err := netip.ParseAddr(host); err == nil {
-		addrs = []netip.Addr{ip}
+		// A zone ("fe80::1%en0") does not change the address; it is dropped
+		// here and only here — a name containing '%' stays a name and goes
+		// to the resolver whole (pre-release review, finding 4).
+		addrs = []netip.Addr{ip.WithZone("")}
 	} else {
 		var lerr error
 		addrs, lerr = d.resolver().LookupNetIP(ctx, "ip", host)

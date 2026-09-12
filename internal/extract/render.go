@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"bytes"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -15,13 +16,21 @@ import (
 // separate paragraphs with one blank line; inline text has its whitespace
 // folded. Sub-renderers handle the contexts that need their lines prefixed
 // (list items, block quotes) or folded to one line (headings, cells, links).
+//
+// The output is a bytes.Buffer, never rewritten: trailing whitespace is
+// removed with Truncate, which costs the whitespace's length, not the
+// output's. (A first draft rebuilt the buffer at every block boundary and
+// took 28 s on a 4 MiB page — pre-release review, finding 1.)
 type renderer struct {
 	markdown bool
 	base     *url.URL
-	out      strings.Builder
+	inCell   bool // inside a table cell: a nested table renders compactly
+	out      bytes.Buffer
 }
 
-func (r *renderer) sub() *renderer { return &renderer{markdown: r.markdown, base: r.base} }
+func (r *renderer) sub() *renderer {
+	return &renderer{markdown: r.markdown, base: r.base, inCell: r.inCell}
+}
 
 func (r *renderer) walk(n *html.Node) {
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -80,11 +89,7 @@ func (r *renderer) element(n *html.Node) {
 		r.block(content)
 	case atom.P, atom.Div, atom.Section, atom.Article, atom.Main, atom.Address, atom.Figure,
 		atom.Figcaption, atom.Header, atom.Hgroup, atom.Details, atom.Dialog, atom.Fieldset,
-		atom.Legend, atom.Summary, atom.Center, atom.Body, atom.Html, atom.Caption, atom.Dd:
-		r.breakBlock()
-		r.walk(n)
-		r.breakBlock()
-	case atom.Dl:
+		atom.Legend, atom.Summary, atom.Center, atom.Body, atom.Html, atom.Caption, atom.Dd, atom.Dl:
 		r.breakBlock()
 		r.walk(n)
 		r.breakBlock()
@@ -98,7 +103,7 @@ func (r *renderer) element(n *html.Node) {
 		}
 		r.block(content)
 	case atom.Br:
-		r.out.WriteString("\n")
+		r.out.WriteByte('\n')
 	case atom.Hr:
 		r.breakBlock()
 		if r.markdown {
@@ -166,12 +171,13 @@ func (r *renderer) text(s string, raw bool) {
 	r.out.WriteString(s)
 }
 
+// atLineStart looks at the last byte only.
 func (r *renderer) atLineStart() bool {
-	out := r.out.String()
-	if out == "" {
+	b := r.out.Bytes()
+	if len(b) == 0 {
 		return true
 	}
-	last := out[len(out)-1]
+	last := b[len(b)-1]
 	return last == '\n' || last == ' '
 }
 
@@ -204,28 +210,42 @@ func (r *renderer) inline(n *html.Node) string {
 	return collapse(sub.out.String())
 }
 
+// trimTrailing removes trailing spaces, tabs and (when newlines is set)
+// newlines by truncating the buffer — proportional to the whitespace, not to
+// the output.
+func (r *renderer) trimTrailing(newlines bool) {
+	b := r.out.Bytes()
+	n := len(b)
+	for n > 0 {
+		c := b[n-1]
+		if c == ' ' || c == '\t' || (newlines && c == '\n') {
+			n--
+			continue
+		}
+		break
+	}
+	r.out.Truncate(n)
+}
+
 // breakBlock ends the current block: trailing whitespace goes, and one blank
 // line follows whatever is there.
 func (r *renderer) breakBlock() {
-	s := strings.TrimRight(r.out.String(), " \t\n")
-	r.out.Reset()
-	if s == "" {
+	r.trimTrailing(true)
+	if r.out.Len() == 0 {
 		return
 	}
-	r.out.WriteString(s)
 	r.out.WriteString("\n\n")
 }
 
 // ensureNewline ends the current line without opening a blank one.
 func (r *renderer) ensureNewline() {
-	s := strings.TrimRight(r.out.String(), " \t")
-	r.out.Reset()
-	if s == "" {
+	r.trimTrailing(false)
+	b := r.out.Bytes()
+	if len(b) == 0 {
 		return
 	}
-	r.out.WriteString(s)
-	if !strings.HasSuffix(s, "\n") {
-		r.out.WriteString("\n")
+	if b[len(b)-1] != '\n' {
+		r.out.WriteByte('\n')
 	}
 }
 
@@ -285,7 +305,8 @@ func (r *renderer) resolve(href string) string {
 
 // list renders <ul>/<ol>. A list that follows inline text on the same line
 // (an item's own text before its nested list) starts on the next line, not
-// after a blank one, so nesting stays tight.
+// after a blank one, so nesting stays tight. Children that are not <li>
+// (a wrapping <div>, a stray element) render in place rather than vanish.
 func (r *renderer) list(n *html.Node) {
 	ordered := n.DataAtom == atom.Ol
 	index := 1
@@ -297,6 +318,7 @@ func (r *renderer) list(n *html.Node) {
 	r.ensureNewline()
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		if c.Type != html.ElementNode || c.DataAtom != atom.Li {
+			r.node(c)
 			continue
 		}
 		marker := "- "
@@ -329,11 +351,10 @@ func (r *renderer) listItem(li *html.Node, marker string) {
 		case i == 0:
 			r.out.WriteString(marker + l)
 		case l == "":
-			r.out.WriteString("")
 		default:
 			r.out.WriteString(indent + l)
 		}
-		r.out.WriteString("\n")
+		r.out.WriteByte('\n')
 	}
 }
 
@@ -366,10 +387,35 @@ func (r *renderer) pre(n *html.Node) {
 	r.block(fence + lang + "\n" + raw + "\n" + fence)
 }
 
+// directRows returns the <tr> elements of one table, through thead / tbody /
+// tfoot but not into a nested table — that one renders inside its cell.
+func directRows(table *html.Node) []*html.Node {
+	var rows []*html.Node
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type != html.ElementNode {
+				continue
+			}
+			switch c.DataAtom {
+			case atom.Table:
+				continue
+			case atom.Tr:
+				rows = append(rows, c)
+			default:
+				walk(c)
+			}
+		}
+	}
+	walk(table)
+	return rows
+}
+
 // table renders rows as pipe rows (markdown, with a separator after the first
-// row) or tab-separated lines.
+// row) or tab-separated lines. Inside a cell, a nested table becomes one line:
+// cells joined by " / ", rows by "; ".
 func (r *renderer) table(n *html.Node) {
-	rows := findAll(n, func(c *html.Node) bool { return c.DataAtom == atom.Tr })
+	rows := directRows(n)
 	var lines []string
 	for i, tr := range rows {
 		var cells []string
@@ -377,8 +423,11 @@ func (r *renderer) table(n *html.Node) {
 			if c.Type != html.ElementNode || (c.DataAtom != atom.Td && c.DataAtom != atom.Th) {
 				continue
 			}
-			cell := r.inline(c)
-			if r.markdown {
+			cellR := r.sub()
+			cellR.inCell = true
+			cellR.walk(c)
+			cell := collapse(cellR.out.String())
+			if r.markdown && !r.inCell {
 				cell = strings.ReplaceAll(cell, "|", `\|`)
 			}
 			cells = append(cells, cell)
@@ -386,7 +435,10 @@ func (r *renderer) table(n *html.Node) {
 		if len(cells) == 0 {
 			continue
 		}
-		if r.markdown {
+		switch {
+		case r.inCell:
+			lines = append(lines, strings.Join(cells, " / "))
+		case r.markdown:
 			lines = append(lines, "| "+strings.Join(cells, " | ")+" |")
 			if i == 0 {
 				seps := make([]string, len(cells))
@@ -395,11 +447,15 @@ func (r *renderer) table(n *html.Node) {
 				}
 				lines = append(lines, "| "+strings.Join(seps, " | ")+" |")
 			}
-		} else {
+		default:
 			lines = append(lines, strings.Join(cells, "\t"))
 		}
 	}
 	if len(lines) == 0 {
+		return
+	}
+	if r.inCell {
+		r.text(strings.Join(lines, "; "), true)
 		return
 	}
 	r.block(strings.Join(lines, "\n"))

@@ -34,6 +34,13 @@ func Extract(decoded string, page *url.URL, format string) (Result, error) {
 		return Result{}, toolerr.Newf(toolerr.CodeUnsupportedContentType, "the HTML could not be parsed: %v", err).With("cause", err.Error())
 	}
 	root := selectRoot(doc)
+	// A root that is itself hidden (a <main hidden>) would render its content
+	// because the walk starts below it; fall back to the body in that case.
+	if root.Type == html.ElementNode && root.DataAtom != atom.Body && skip(root) {
+		if body := findFirst(doc, func(n *html.Node) bool { return n.DataAtom == atom.Body }); body != nil {
+			root = body
+		}
+	}
 	r := &renderer{markdown: format != FormatText, base: baseURL(doc, page)}
 	r.walk(root)
 	return Result{Title: titleOf(doc, root), Text: tidy(r.out.String())}, nil

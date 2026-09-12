@@ -126,6 +126,33 @@ func newRig(t *testing.T) *rig {
 		}
 		time.Sleep(1500 * time.Millisecond)
 	}))
+	// Pre-release review fixtures.
+	mux.HandleFunc("/cross", record(func(w http.ResponseWriter, req *http.Request) {
+		_, port, _ := net.SplitHostPort(req.Host)
+		http.Redirect(w, req, "http://ok2.test:"+port+"/echo", http.StatusFound)
+	}))
+	mux.HandleFunc("/echo", record(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprintf(w, "UA=%s;AL=%s;REF=%s;", req.Header.Get("User-Agent"), req.Header.Get("Accept-Language"), req.Header.Get("Referer"))
+	}))
+	mux.HandleFunc("/schemerel", record(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Location", "//u:p@"+req.Host+"/html")
+		w.WriteHeader(http.StatusFound)
+	}))
+	mux.HandleFunc("/identity", record(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set("Content-Encoding", "identity")
+		fmt.Fprint(w, "plain identity")
+	}))
+	mux.HandleFunc("/xgzip", record(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("Content-Encoding", "x-gzip")
+		_, _ = w.Write([]byte{0x1f, 0x8b, 0x08, 0x00})
+	}))
+	mux.HandleFunc("/svg", record(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/svg+xml")
+		fmt.Fprint(w, `<svg xmlns="http://www.w3.org/2000/svg"/>`)
+	}))
 	r.srv = httptest.NewServer(mux)
 	t.Cleanup(r.srv.Close)
 	return r
@@ -141,6 +168,7 @@ func (r *rig) connect(ctx context.Context, network, address string) (net.Conn, e
 func (r *rig) client(o Options) *Client {
 	res := resolver{
 		"ok.test":   {netip.MustParseAddr("203.0.113.10")},
+		"ok2.test":  {netip.MustParseAddr("203.0.113.11")},
 		"evil.test": {netip.MustParseAddr("10.0.0.1")},
 	}
 	o.Dialer = &guard.Dialer{Resolver: res, Connect: r.connect}

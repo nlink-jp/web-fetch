@@ -45,9 +45,13 @@ lint:
 ## check: Run lint + test + build-all
 check: lint test build-all
 
-## e2e: Live end-to-end tests against real sites (network required)
+## e2e: Live end-to-end tests against real sites (network required). The Go
+## suite's status is kept (its full log is dist/e2e-go.log); the filtered
+## echo is for reading, not for deciding.
 e2e: build
-	go test -tags e2e -count=1 -v ./e2e/... 2>&1 | grep -E "^(=== RUN|--- |MEASURED|\s+live_test|ok|FAIL|PASS)" || true
+	@go test -tags e2e -count=1 -v ./e2e/... > dist/e2e-go.log 2>&1; rc=$$?; \
+		grep -E "^(=== RUN|--- |MEASURED|\s+live_test|ok|FAIL|PASS)" dist/e2e-go.log; \
+		exit $$rc
 	@scripts/e2e.sh
 
 ## package: Build all platforms, archive with version suffix (zip for

@@ -72,12 +72,14 @@ func New(o Options) *Client {
 	return &Client{
 		opts: o,
 		transport: &http.Transport{
-			Proxy:               nil, // never a proxy: it would blind the address judgment
-			DialContext:         o.Dialer.DialContext,
-			ForceAttemptHTTP2:   true,
-			TLSHandshakeTimeout: 10 * time.Second,
-			MaxIdleConns:        4,
-			IdleConnTimeout:     30 * time.Second,
+			Proxy:             nil, // never a proxy: it would blind the address judgment
+			DialContext:       o.Dialer.DialContext,
+			ForceAttemptHTTP2: true,
+			// No TLSHandshakeTimeout of its own: the client's deadline bounds
+			// the handshake too, and a second limit would produce a "timeout"
+			// naming a deadline that had not passed.
+			MaxIdleConns:    4,
+			IdleConnTimeout: 30 * time.Second,
 		},
 	}
 }
@@ -208,6 +210,9 @@ func (c *Client) checkRedirect(next *http.Request, via []*http.Request, hops *[]
 		return toolerr.Newf(toolerr.CodeSchemeNotAllowed, "a redirect points at scheme %q; only http and https are followed", next.URL.Scheme).
 			With("scheme", next.URL.Scheme).With("hop", len(via))
 	}
+	// Go adds a Referer naming the previous hop. The header policy is "what
+	// this tool chose to send and nothing else", so it goes.
+	next.Header.Del("Referer")
 	return nil
 }
 
@@ -216,6 +221,11 @@ func (c *Client) checkRedirect(next *http.Request, via []*http.Request, hops *[]
 func (c *Client) transportError(err error, host string) error {
 	var te *toolerr.Error
 	if errors.As(err, &te) {
+		// A timeout the dialer raised knows the host but not the deadline;
+		// every timeout the caller sees names it (RFP error table).
+		if te.Code == toolerr.CodeTimeout && te.Details["timeout"] == nil {
+			te = te.With("timeout", c.opts.Timeout.String())
+		}
 		return te
 	}
 	var ne net.Error
@@ -266,7 +276,11 @@ func classify(mediaType string) (Kind, bool) {
 		return KindHTML, true
 	case strings.HasPrefix(mediaType, "text/"):
 		return KindText, true
-	case mediaType == "application/json", mediaType == "application/xml", strings.HasSuffix(mediaType, "+json"), strings.HasSuffix(mediaType, "+xml"):
+	case mediaType == "application/json", mediaType == "application/xml", strings.HasSuffix(mediaType, "+json"):
+		return KindText, true
+	case strings.HasPrefix(mediaType, "application/") && strings.HasSuffix(mediaType, "+xml"):
+		// application/*+xml (Atom, RSS, XHTML variants) is text; image/svg+xml
+		// is an image and stays refused (RFP §2 table).
 		return KindText, true
 	}
 	return 0, false

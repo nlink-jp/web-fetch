@@ -41,6 +41,7 @@ func TestClassifyPinsEveryRow(t *testing.T) {
 		"198.18.0.1":      ClassReserved,
 		"198.19.255.255":  ClassReserved,
 		"240.0.0.1":       ClassReserved,
+		"2001:2::1":       ClassReserved, // IPv6 benchmarking, the twin of 198.18/15
 		// Public: the empty class.
 		"8.8.8.8":         "",
 		"1.1.1.1":         "",
@@ -56,8 +57,8 @@ func TestClassifyPinsEveryRow(t *testing.T) {
 			t.Errorf("Classify(%s) = %q, want %q", in, got, want)
 		}
 	}
-	if len(Table()) != 15 {
-		t.Errorf("the table has %d rows; ADR-0001 lists 15 — update the ADR and this test together", len(Table()))
+	if len(Table()) != 16 {
+		t.Errorf("the table has %d rows; ADR-0001 lists 16 — update the ADR and this test together", len(Table()))
 	}
 }
 

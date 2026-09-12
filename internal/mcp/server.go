@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 )
 
@@ -186,8 +187,13 @@ func (s *Server) callTool(ctx context.Context, req *request) response {
 		}
 	}
 	// get_usage returns the manual itself, which is Markdown rather than a JSON
-	// document — wrapping it in JSON would only make it harder to read.
+	// document — wrapping it in JSON would only make it harder to read. It
+	// takes no arguments, and says so when handed one.
 	if p.Name == ToolGetUsage {
+		var none struct{}
+		if err := DecodeArgs(p.Arguments, &none); err != nil {
+			return okResponse(req.ID, toolError(err))
+		}
 		return okResponse(req.ID, toolRawText(UsageDoc()))
 	}
 	tool, ok := s.byName[p.Name]
@@ -246,18 +252,36 @@ func DecodeArgs(raw json.RawMessage, into any) error {
 	dec := json.NewDecoder(strings.NewReader(string(raw)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(into); err != nil {
-		return ArgErrorf("%v", err)
+		e := &ArgError{Msg: err.Error()}
+		// encoding/json names the field in prose: `json: unknown field "x"`,
+		// `json: cannot unmarshal string into Go struct field a.count of
+		// type int`. Lift it into details.argument so the caller can branch.
+		if m := unknownField.FindStringSubmatch(err.Error()); m != nil {
+			e.Argument = m[1]
+		} else if m := badField.FindStringSubmatch(err.Error()); m != nil {
+			e.Argument = m[1]
+		}
+		return e
 	}
 	return nil
 }
+
+var (
+	unknownField = regexp.MustCompile(`unknown field "([^"]+)"`)
+	badField     = regexp.MustCompile(`Go struct field [^.]+\.([A-Za-z0-9_]+)`)
+)
 
 // CodeInvalidArgument is this layer's own error code — an unknown tool, an
 // unknown or mistyped argument. Every other code comes from the packages
 // behind the tools, so an agent sees one vocabulary end to end.
 const CodeInvalidArgument = "invalid_argument"
 
-// ArgError is an argument-validation failure.
-type ArgError struct{ Msg string }
+// ArgError is an argument-validation failure. Argument, when known, names the
+// offending argument and surfaces as details.argument.
+type ArgError struct {
+	Msg      string
+	Argument string
+}
 
 func (e *ArgError) Error() string { return e.Msg }
 
@@ -279,7 +303,11 @@ type Coded interface {
 func StructuredError(err error) map[string]any {
 	var ae *ArgError
 	if errors.As(err, &ae) {
-		return map[string]any{"code": CodeInvalidArgument, "message": ae.Msg}
+		out := map[string]any{"code": CodeInvalidArgument, "message": ae.Msg}
+		if ae.Argument != "" {
+			out["details"] = map[string]any{"argument": ae.Argument}
+		}
+		return out
 	}
 	var c Coded
 	if errors.As(err, &c) {

@@ -56,6 +56,7 @@ var table = []row{
 	{mustPrefix("fec0::/10"), ClassSiteLocal},
 	{mustPrefix("fc00::/7"), ClassUniqueLocal},
 	{mustPrefix("ff00::/8"), ClassMulticast},
+	{mustPrefix("2001:2::/48"), ClassReserved}, // benchmarking, the IPv6 twin of 198.18/15
 }
 
 // embed is an IPv6 prefix that carries an IPv4 address; the embedded address
