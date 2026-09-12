@@ -1,10 +1,10 @@
 package mcp
 
-// toolCodes lists the error codes the packages behind the tools can surface.
-// It lives in a test file of this package (rather than importing them) so the
-// manual meta-test stays decoupled from the fetch pipeline; each package's own
-// test pins the same list to its constants. Empty until the fetch tool lands
-// (RFP Phase 1).
+import "github.com/nlink-jp/web-fetch/internal/toolerr"
+
+// toolCodes lists the error codes the packages behind the tools can surface,
+// so the manual meta-test checks every one has recovery guidance. toolerr is
+// the single vocabulary (RFP §2 error table).
 func toolCodes() []string {
-	return nil
+	return toolerr.Codes()
 }

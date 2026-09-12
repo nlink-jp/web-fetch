@@ -24,9 +24,13 @@ func usageTool() Tool {
 
 // Instructions is what initialize hands the client. lagent shows a clipped
 // first sentence of it in its tool catalog before the server is loaded, so the
-// first sentence has to say what the server is for; the rest is what a model
-// needs if it never calls get_usage.
+// first sentence says what the server is for; the rest is the contract a model
+// needs if it never calls get_usage. Trigger and contract only — no defensive
+// prose (ADR-0002 §4).
 const Instructions = `web-fetch returns the extracted text of one URL, fetched from this machine ` +
-	`(your IP address, no credentials, nothing stored on disk). Call get_usage first — it is the full ` +
-	`reference: tools, arguments, the response schema and the error-recovery table. Never point it at ` +
-	`a URL under investigation: the site sees a visit from here.`
+	`(your IP address, no credentials, nothing stored on disk). Call fetch when the user gives a URL, ` +
+	`when a search result must be read whole, or when llm_context answered with a different page. ` +
+	`A result carries max_chars characters of text from offset; truncated with next_offset means more ` +
+	`remains, and an unchanged doc_id means the same page. Call get_usage for the full reference: ` +
+	`arguments, the response schema and the error-recovery table. Never point it at a URL under ` +
+	`investigation: the site sees a visit from here.`

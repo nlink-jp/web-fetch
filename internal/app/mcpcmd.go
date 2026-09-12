@@ -25,11 +25,12 @@ func runMCP(args []string, version string, stdin io.Reader, stdout, stderr io.Wr
 	// The config is loaded here so a broken file — or a file that tries to
 	// loosen the address guard from the wrong place — fails at startup, where
 	// the operator sees it, rather than on the first tool call.
-	if _, err := config.Load(configPath); err != nil {
+	cfg, err := config.Load(configPath)
+	if err != nil {
 		return fail(stderr, exitError, "%v", err)
 	}
 
-	srv := mcp.New(version)
+	srv := mcp.New(version, tools(cfg, version)...)
 	if err := srv.Serve(context.Background(), stdin, stdout); err != nil {
 		return fail(stderr, exitError, "mcp: %v", err)
 	}
