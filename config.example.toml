@@ -1,0 +1,57 @@
+# web-fetch configuration — copy to ~/.config/web-fetch/config.toml
+# (also read: $XDG_CONFIG_HOME/web-fetch/config.toml and, on macOS,
+# ~/Library/Application Support/web-fetch/config.toml; the first that exists
+# wins — the "default search path").
+#
+# Every setting is optional; the values shown are the built-in defaults.
+# Precedence: flag > WEB_FETCH_* environment variable > this file > built-in
+# default. Unknown sections or keys are rejected, so a typo cannot silently
+# fall back to a default.
+#
+# This file holds no credential: web-fetch sends none. The one setting that
+# matters for safety is [network] allow_private, and it is honoured only when
+# this file sits on the default search path above. A file named by --config or
+# WEB_FETCH_CONFIG that sets it true is refused at startup.
+
+[fetch]
+# Output format: markdown | text | raw. Environment: WEB_FETCH_FORMAT
+format = "markdown"
+
+# Characters (runes) of extracted text per response, 1000-200000. Page through
+# the rest with --offset / the offset argument. 6000 keeps a Japanese page's
+# default response inside lagent's 20,000-byte inline cap.
+# Environment: WEB_FETCH_MAX_CHARS
+max_chars = 6000
+
+# Deadline from request start (DNS included) to the end of the body, 1s-120s.
+# A Go duration ("20s", "2m") or bare seconds ("20"). Environment: WEB_FETCH_TIMEOUT
+timeout = "20s"
+
+# Most bytes read from a response after decompression, 64KiB-50MiB. Over it the
+# fetch fails with too_large; nothing is truncated. Environment: WEB_FETCH_MAX_BYTES
+max_bytes = "5MiB"
+
+# Accept-Language header. Empty = not sent. Example: "ja, en;q=0.8"
+# Environment: WEB_FETCH_ACCEPT_LANGUAGE
+accept_language = ""
+
+# User-Agent. Empty = "web-fetch/<version> (+https://github.com/nlink-jp/web-fetch)"
+# Environment: WEB_FETCH_USER_AGENT
+# user_agent = ""
+
+[network]
+# Redirect hops followed, 0-10. Every hop is judged against the address table
+# again, and a Location carrying user:pass@ or a non-http(s) scheme is refused.
+max_redirects = 5
+
+# true lets fetches reach loopback, private, link-local and the other reserved
+# ranges (your LAN, localhost, cloud metadata). Honoured ONLY in a file on the
+# default search path. No flag, environment variable or MCP argument exists
+# for it, by design.
+allow_private = false
+
+[cache]
+# The MCP server keeps fetched pages in memory so paging does not refetch.
+# 0 disables it. Never written to disk. The CLI has no cache.
+ttl = "10m"
+max_entries = 32
