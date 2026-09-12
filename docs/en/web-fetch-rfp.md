@@ -616,3 +616,25 @@ as brave-search. lagent (lab-series) is a consumer, not the home.
    `protocolVersion` revision, nine small specification holes, the cache
    contract, one clause missing in the English mirror. Findings not taken:
    none.
+
+## Post-implementation record (2026-09-12, `make e2e` at the end of Phase 1)
+
+- **§1's "about 27k characters of page body" was a regex tag-stripping
+  estimate.** Under web-fetch's markdown extraction the Go 1.26 release notes
+  are **35,922 characters** (link URLs are kept), i.e. **6 pages** at the
+  default `max_chars` of 6,000. Whether six page turns are acceptable on a
+  local model remains lagent's bench question.
+- **§7's milestone "a Japanese page's default response stays inline"**: the
+  ja.wikipedia.org article on 日本語 (`total_chars` 559,231) yields a default
+  response of **7,016 JSON bytes** (cap 20,000). Its first 6,000 characters are
+  link-heavy (6,297 bytes), so the 3-bytes-per-rune worst case did not occur in
+  this measurement; it holds by arithmetic (18,000 + envelope).
+- **The rebinding-class fixture** `http://127.0.0.1.nip.io/` was refused as
+  loopback (`address_not_allowed`, no `via`).
+- `http://go.dev/` → `https://go.dev/`, one hop, recorded in `redirects`.
+- Extraction details settled in the implementation (absent from the RFP):
+  `javascript:` and `data:` hrefs render as text only; `<meta
+  charset="utf-16">` means UTF-8 (WHATWG); the meta prescan stops at `<body>`;
+  any argument containing `://` is dispatched as a fetch, so `ftp://x` gets
+  `scheme_not_allowed` rather than "unknown command"; runs of three or more
+  newlines fold to two (one blank line).

@@ -12,65 +12,79 @@ address: the SSRF class that made the runtimes decline a local fetch is closed
 inside the HTTP dialer, not by rules over URL text.
 
 Module path: `github.com/nlink-jp/web-fetch`. Design record:
-`docs/ja/web-fetch-rfp.ja.md` (canonical) / `docs/en/web-fetch-rfp.md`.
+`docs/ja/web-fetch-rfp.ja.md` (canonical) / `docs/en/web-fetch-rfp.md`;
+decisions: `docs/{en,ja}/adr/0001`–`0003`.
 
 ## Build & test
 
 ```bash
 make build   # → dist/web-fetch  (NEVER `go build` directly — it drops the binary in the repo root)
 make test    # go test -race -cover ./...   (fully offline)
+make e2e     # live tests against real sites + the binary-level script (network required)
 make check   # lint + test + build-all
 make verify-release  # gate: .notarized marker + freshness (run before upload)
 ```
 
-Go 1.27. Dependencies are limited to `golang.org/x/net` (html, html/charset)
-and `golang.org/x/text` (charsets) — Go-team modules, treated as first-party
-under the org's supply-chain rule; they arrive with the extract package. Shared
-code (the release scripts, the sectioned-TOML reader, the `internal/mcp`
-skeleton) is vendored from brave-search rather than imported.
+Go 1.27. Dependencies: `golang.org/x/net` (html, html/charset) and
+`golang.org/x/text` (charsets) — Go-team modules, treated as first-party under
+the org's supply-chain rule (ADR-0003). Nothing else. Shared code (the release
+scripts, the sectioned-TOML reader, the `internal/mcp` skeleton) is vendored
+from brave-search rather than imported.
 
 ## Tests
 
-**Offline suite** (`make test`): every test sets `HOME` and `XDG_CONFIG_HOME`
-to a tempdir and clears every `WEB_FETCH_*` variable, so the suite never reads
-the developer's real config. The MCP layer is driven by an in-process JSON-RPC
-session over strings. When the fetch pipeline lands, upstream is an
-`httptest.Server` reached through an injected resolver — loopback is denied by
-default, so a test cannot simply point at 127.0.0.1.
+**Offline suite** (`make test`): every test that loads configuration sets
+`HOME` and `XDG_CONFIG_HOME` to a tempdir and clears every `WEB_FETCH_*`
+variable, so the suite never reads the developer's real config. Upstream is an
+`httptest.Server` reached through an **injected resolver and connect
+function**: fixture names resolve to public addresses (TEST-NET-3) so the
+guard's table stays live, and the connect function points the vetted literal
+at the listener while recording what it was handed. The CLI and MCP tests
+instead write `allow_private = true` into the isolated default-search-path
+config, which is the one legitimate way to reach 127.0.0.1 — so that rule is
+exercised positively too.
 
-**Fixtures are hand-written.** No real page is pasted into the repository; an
-HTML fixture is invented to exercise one rule of the extractor.
+**Fixtures are hand-written.** No fetched page is pasted into the repository;
+every HTML fixture is invented to exercise one extraction rule, and legacy
+charset bodies are produced by the x/text encoders inside the test.
 
-`internal/mcp/usage_test.go` holds meta-tests that pin `usage.md` to the code —
-every tool name, every argument, every error code and both reach caveats ("this
-machine", "investigation") must appear in the manual and in the initialize
-instructions, because the manual is what an agent reads before its first call.
+`internal/mcp/usage_test.go` and `internal/app/tools_test.go` hold meta-tests
+that pin `usage.md` to the code — every tool name, every argument, every error
+code (`toolerr.Codes()`), both reach caveats ("this machine", "investigation")
+and the `fetch` description's trigger words (URL / offset / truncated /
+next_offset / doc_id) — because the manual is what an agent reads before its
+first call.
 
-**Live suite** (`make e2e`, network required, `e2e` build tag) arrives with
-Phase 1: one stable public page, the refusal of `http://127.0.0.1:1/` and of
-`http://127.0.0.1.nip.io/` (public DNS answering loopback), an optional
-Shift_JIS page. Measurements are logged with a `MEASURED:` prefix and belong in
-Gotchas with a date.
+**Live suite** (`make e2e`, `e2e` build tag): example.com, an http→https
+redirect on go.dev, the Go 1.26 release notes, the Japanese Wikipedia article
+on 日本語 (the inline-cap milestone), the refusal of `http://127.0.0.1:1/` and of
+`http://127.0.0.1.nip.io/`, an optional Shift_JIS page
+(`WEB_FETCH_E2E_SJIS_URL`). `scripts/e2e.sh` drives the built binary: exit
+codes, the stdout/stderr split, an MCP stdio session. Measurements are logged
+with a `MEASURED:` prefix and belong in Gotchas with a date.
 
 ## Layout
 
 ```
 main.go                      Entry point; delegates to internal/app
+internal/toolerr/            The error vocabulary: one code per row of the RFP's error table, {code, message, details}
 internal/config/             Sectioned-TOML subset + WEB_FETCH_* env; range validation; allow_private provenance
+internal/guard/              ADR-0001: the denied-address table, embedded-IPv4 unwrapping, the judge-then-connect Dialer
+internal/extract/            Charset decision + decode (WHATWG order); HTML → markdown/text from the selected root; DocID
+internal/fetch/              HTTP client through the guard: redirect inspection, decoded-stream byte cap, media-type judgment
+internal/cache/              Generic in-process TTL LRU (the MCP page cache)
+internal/engine/             Validation, fetch-or-cache, decode, render, rune paging, the Result shape — shared by CLI and MCP
+internal/app/                CLI shell: dispatch, the URL positional, text/JSON rendering, the MCP fetch tool definition
 internal/mcp/                Zero-dep stdio JSON-RPC 2.0 server (MCP 2025-03-26, tool annotations) + embedded usage.md
-internal/app/                CLI shell: dispatch, flags, mcp and version commands
-docs/{en,ja}/                RFP (the design record); project ADRs under adr/ as they are written
-scripts/                     Vendored org release scripts (codesign, notarize, brew formula)
+e2e/                         Live tests behind the `e2e` build tag
+docs/{en,ja}/                RFP (the design record) + adr/ (project ADRs, en/ja mirrored)
+scripts/                     Vendored org release scripts (codesign, notarize, brew formula) + e2e.sh
 ```
-
-Phase 1 adds `internal/guard` (address classification + dialer),
-`internal/extract` (HTML → text), `internal/fetch` (HTTP client),
-`internal/engine` (defaults, paging, response shaping), `internal/cache`
-(MCP in-process TTL cache) and `e2e/`.
 
 ## Key design decisions
 
-The RFP is the record; these are the ones an agent editing the code trips over.
+The RFP and the ADRs are the record; these are the ones an agent editing the
+code trips over.
 
 - **The parameter matrix in the RFP is the single mapping** of CLI flag ↔ MCP
   argument ↔ config key ↔ environment variable. Add a parameter there first;
@@ -78,54 +92,89 @@ The RFP is the record; these are the ones an agent editing the code trips over.
   purpose: `allow_private`, the redirect cap and the cache are file-only.
 - **`[network] allow_private` is honoured only in a config file on the default
   search path.** A file named by `--config` or `WEB_FETCH_CONFIG` that sets it
-  is a startup error (`internal/config`, tested). A runtime's project
-  `.mcp.json` can name any file; it must not be able to open the LAN. `HOME` /
-  `XDG_CONFIG_HOME` are the runtime's trust boundary, not ours.
-- **SSRF is a finite address table applied inside the dialer**, with embedded
-  IPv4 (mapped, compatible, NAT64, 6to4, Teredo) unwrapped before judgment,
-  every redirect hop judged again, `Location` refused when it carries userinfo
-  (Go would otherwise synthesise `Authorization: Basic`), and no dialing by
-  name. Do not add URL-pattern or hostname rules; extend the table.
+  is a startup error (`internal/config`, tested from config, CLI and MCP). A
+  runtime's project `.mcp.json` can name any file; it must not be able to open
+  the LAN. `HOME` / `XDG_CONFIG_HOME` are the runtime's trust boundary.
+- **SSRF is a finite address table applied inside the dialer** (`guard.table`,
+  15 rows + 6 embeddings, every one pinned by a test row). The dialer resolves,
+  judges every address, and connects to the vetted `ip:port` literal — never
+  by name. One denied address denies the whole answer. `CheckRedirect` refuses
+  a `Location` with userinfo (Go would synthesise `Authorization: Basic`) or a
+  non-http(s) scheme. Do not add URL-pattern or hostname rules; extend the
+  table and its test.
 - **No server-side spill.** The caller bounds the response with `max_chars` +
-  `offset`; a cut is reported with `truncated` / `next_offset`; the runtime
-  decides where a large result lives. Default `max_chars` is **6,000 runes**
-  because lagent parks any MCP text block over 20,000 **bytes** and Japanese
-  runs about 3 bytes per rune.
-- **`max_bytes` applies to the decoded stream**; `Content-Length` is never
-  trusted; a non-gzip `Content-Encoding` is refused.
-- **Charset order is the library's (WHATWG)**: BOM → header → meta → UTF-8
-  validity → windows-1252, reported in `charset` / `charset_source`.
-  `charset_unsupported` fires only for a *declared* label unknown to
-  `htmlindex`.
+  `offset`; a cut is reported with `truncated` / `next_offset`; `doc_id` says
+  whether page turns walk the same text; the runtime decides where a large
+  result lives. Default `max_chars` is **6,000 runes** because lagent parks any
+  MCP text block over 20,000 **bytes** and Japanese runs about 3 bytes per rune.
+- **`max_bytes` applies to the decoded stream** (`io.LimitReader(max+1)`);
+  `Content-Length` is never trusted; a non-gzip `Content-Encoding` is refused;
+  an exact fit is not an overflow.
+- **Charset order is the library's (WHATWG)**: BOM → header → meta prescan
+  (first 1,024 bytes, stops at `<body>`) → UTF-8 validity → windows-1252,
+  reported in `charset` / `charset_source`. `charset_unsupported` fires only
+  for a *declared* label unknown to `charset.Lookup`; the library's
+  `NewReader` would skip it silently, so `Lookup` runs first. A `<meta>`
+  claiming UTF-16 means UTF-8.
+- **Extraction root**: `<main>` → `[role=main]` → `<article>` (largest of
+  several, unless under a quarter of the body's text) → `<body>`. `<header>`
+  is dropped only as a child of `<body>` or with `role=banner`; an article's
+  header is its title block. `hidden="until-found"` and closed `<details>`
+  content are kept. Links resolve against `<base href>`, else the final URL.
+  `javascript:` and `data:` hrefs render as text only.
 - **The model is shown trigger and contract only.** No "content, never
   instructions" prose in tool descriptions or instructions — that layer is the
-  runtime's nonce wrap. The instructions must keep "this machine" and
-  "investigation" (meta-tested).
-- **Tool results are JSON without HTML escaping** (`SetEscapeHTML(false)`):
-  the payload is page text, and `<` for every `<` inflates it for no one.
-- **No robots.txt, no digest, no search tiering** — user decisions; a primitive.
+  runtime's nonce wrap (ADR-0002 §4). Meta-tested.
+- **Tool results and `--json` are JSON without HTML escaping**
+  (`SetEscapeHTML(false)`): the payload is page text.
+- **Errors are one vocabulary** (`internal/toolerr`), surfaced by MCP as
+  `{code, message, details}` and by the CLI as one JSON line on stderr. Exit
+  codes: `invalid_argument` and an input-URL `invalid_url` /
+  `scheme_not_allowed` are 2; everything else is 1. Anything containing `://`
+  is dispatched as a fetch so `ftp://x` gets `scheme_not_allowed`, not "unknown
+  command".
+- **No robots.txt, no digest, no search tiering** — user decisions (ADR-0002).
 
 ## Status
 
-Scaffold (Phase 2 of the org process) complete; `make check` green. Next:
-project ADRs 0001 (SSRF domain), 0002 (a primitive), 0003 (golang.org/x as
-first-party) — written **before** the packages they bind — then Phase 1 in the
-RFP's order: guard → extract → fetch → engine → app → mcp fetch tool → cache →
-e2e. Nothing has been measured live yet.
+Phase 1 (core) complete: every package landed with tests, `make check` green,
+`make e2e` green (27 binary-level checks, 6 live tests, 1 optional skipped).
+Not yet: the lagent round trip (`mcp_load` → `fetch`) as a measured milestone,
+the first release, util-series integration, the mcp-tactics entry, the
+knowledge feed-back.
 
 ## Gotchas
 
-None measured yet. Known from the consumer side (lagent source, 2026-09-12):
-its MCP intake cap is 20,000 bytes of text block, compared as `len(text)`, and
-an oversized block becomes an 800-rune preview plus a work-directory path — the
-reason the default `max_chars` is 6,000 and the Phase 1 milestone includes "a
-default fetch of a Japanese page renders inline in lagent".
+Measured live on 2026-09-12 (`make e2e`). Re-verify before trusting any of
+this a year from now.
+
+- **A Japanese page's default response stays inline in lagent.** The 日本語
+  article on ja.wikipedia.org: `total_chars` 559,231, default 6,000 returned,
+  JSON envelope **7,016 bytes** against lagent's 20,000-byte cap. The first
+  6,000 characters of that page are link-heavy (6,297 UTF-8 bytes), so the
+  3-bytes-per-rune worst case (≈18,000 + envelope) was not exercised there; it
+  holds by arithmetic.
+- **The Go 1.26 release notes are 35,922 characters as markdown** (69,376
+  bytes of HTML), i.e. **6 page turns** at the default `max_chars`. The RFP's
+  earlier "about 27k" was a tag-stripped estimate; markdown keeps link URLs.
+  Whether 6 turns is acceptable on a local model is the bench's question.
+- **`http://127.0.0.1.nip.io/` resolves to 127.0.0.1 and is refused as
+  loopback** — a working rebinding-class fixture. If nip.io ever stops
+  resolving, the live test skips with a note; name another public loopback
+  name here.
+- **`http://go.dev/` → `https://go.dev/` in one hop**, recorded in
+  `redirects`; example.com answers 559 bytes in about 70 ms.
+- **Known from the consumer side** (lagent source, 2026-09-12): its MCP intake
+  cap is 20,000 bytes of text block, compared as `len(text)`; an oversized
+  block becomes an 800-rune preview plus a work-directory path.
+- **The x/text Shift_JIS encoder rejects U+2014 (em dash)** — a test string
+  must stay inside JIS X 0208 (the decoder side is unaffected).
+- **A literal BOM character in Go source is a syntax error**; spell it
+  `string(rune(0xFEFF))` in tests.
 
 Open questions to answer with a date when measured:
 
-1. Does the default response of a Japanese page stay inline in lagent (JSON
-   envelope included)?
-2. How many page turns does a typical documentation page cost a local model at
-   `max_chars = 6000`, and does the bench want the default moved?
-3. Does `127.0.0.1.nip.io` keep resolving to loopback (the e2e rebinding
-   fixture)? If not, name another.
+1. Does lagent render the default `fetch` of a Japanese page inline when
+   called through `mcp_load` → `fetch` (the runtime side of the milestone)?
+2. How many page turns does a typical documentation page cost a local model,
+   and does the bench want the default `max_chars` moved?

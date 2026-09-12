@@ -3,13 +3,14 @@
 URL 1 本をこのマシンから取得し、読める形のテキストにして返します。コマンドライン
 ツールとして、またエージェントランタイム向けのローカル MCP サーバとして動きます。
 
-> **状態: 開発中・未リリース。** `mcp` と `version` コマンドは動きます。取得本体は
-> 初回リリースで入ります。以下の説明はコードが目指している仕様です。
+> **状態: プレリリース。** 以下のコマンドはすべて動き、オフラインテストと live テストで
+> 覆われています。初回のタグ付きリリース、署名済みバイナリ、Homebrew formula はこれから。
 
 ```
 web-fetch https://go.dev/doc/go1.26                  # ページの Markdown 風テキスト
 web-fetch --format text --max-chars 3000 https://…   # 平文、先頭 3,000 文字
 web-fetch --json https://…                           # 同じ結果を JSON で（MCP が返す形）
+web-fetch https://… --offset 6000                    # 長い文書の次のページ
 web-fetch mcp                                        # stdio の MCP サーバ: ツールは fetch と get_usage
 ```
 
@@ -17,6 +18,7 @@ web-fetch mcp                                        # stdio の MCP サーバ: 
 
 - **URL 1 本**（`http` / `https`）を取得し、redirect を最大 5 回追い、本文を
   **markdown**・**平文**・**raw**（復号後の本体そのまま）のいずれかで返します。
+  フラグは URL の前でも後でも構いません。
 - HTML は宣言された文字コードなら何でも扱います（Shift_JIS と EUC-JP を含む）。
   平文と JSON も扱います。PDF・画像・その他バイナリは明確なエラーで拒否します。
 - 応答は必ず有限です。`--max-chars`（既定 6,000）と `--offset` で全文をページ送り
@@ -53,6 +55,26 @@ make build          # → dist/web-fetch
 
 リリースでは署名・notarize 済みバイナリと Homebrew formula
 （`brew install nlink-jp/tap/web-fetch`）を配布します。
+
+## 使い方
+
+```
+web-fetch [flags] <url>
+web-fetch mcp | version
+
+  -j, --json            JSON 出力（MCP ツールが返す形と同じ）
+  --format <f>          markdown | text | raw（既定 markdown）
+  --max-chars <n>       返す文字数、1000-200000（既定 6000）
+  --offset <n>          開始位置。切れた結果の next_offset を渡す
+  --timeout <dur>       リクエスト開始からの期限、1s-120s（既定 20s）
+  --max-bytes <size>    復号後に読む最大バイト数、64KiB-50MiB（既定 5MiB）
+  -c, --config <path>   設定ファイル
+```
+
+テキスト出力は題名、最終 URL、空行、本文の順です。切れたページは
+`[truncated: 0–6000 of 26946 chars; continue with --offset 6000]` で終わります。
+非 HTML の本体（text、JSON）はそのまま印字され、形式は `raw` と報告されます。
+エラーは stderr に JSON オブジェクト `{code, message, details}` 1 つで出ます。
 
 ## 設定
 
@@ -91,6 +113,9 @@ JSON（`{code, message, details}`）です。サーバは自分が何のため�
 
 - [RFP](docs/ja/web-fetch-rfp.ja.md) — 設計記録: パラメータ行列、応答スキーマ、
   エラー表、SSRF の拒否領域、何をなぜ決めたか
+- ADR: [0001 アドレスガード](docs/ja/adr/0001-ssrf-closed-in-the-dialer.ja.md)、
+  [0002 プリミティブ](docs/ja/adr/0002-a-primitive.ja.md)、
+  [0003 golang.org/x を一次提供物として](docs/ja/adr/0003-golang-x-as-first-party.ja.md)
 - English: [README.md](README.md), [RFP (en)](docs/en/web-fetch-rfp.md)
 
 ## ライセンス
