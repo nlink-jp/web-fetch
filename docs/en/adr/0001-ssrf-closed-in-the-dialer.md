@@ -49,7 +49,7 @@ Four facts shape the defence:
    by tests: loopback, private (RFC 1918), link-local (169.254/16 including
    cloud metadata, fe80::/10), site-local (fec0::/10), unique-local (fc00::/7),
    unspecified, broadcast, multicast, shared address space (100.64/10), and the
-   reserved blocks 0/8, 192.0.0/24, 198.18/15, 240/4. An IPv6 address that
+   reserved blocks 0/8, 192.0.0/24, 198.18/15, 240/4, 2001:2::/48. An IPv6 address that
    embeds an IPv4 address — IPv4-mapped, IPv4-compatible, NAT64 (64:ff9b::/96
    and 64:ff9b:1::/48), 6to4 (2002::/16) and Teredo (2001::/32, inverted) — is
    unwrapped and the embedded address judged instead. **One denied address
@@ -61,7 +61,8 @@ Four facts shape the defence:
    (`too_many_redirects`).
 4. **The client carries no credentials.** No cookie jar, no `Authorization`,
    no caller-supplied headers, and userinfo is rejected in the input URL as
-   well as in every redirect target.
+   well as in every redirect target. The `Referer` Go adds on a redirect is
+   removed too: only headers this tool chose are sent.
 5. **Proxy environment variables are ignored** (`Transport.Proxy` is nil).
 6. **`[network] allow_private = true` is honoured only in a config file found
    on the default search path.** A file reached via `--config` or

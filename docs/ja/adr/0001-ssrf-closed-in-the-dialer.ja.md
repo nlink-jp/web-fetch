@@ -43,7 +43,7 @@ request forgery）のクラスはここで現実になる。モデルが、あ�
 2. **拒否領域は 1 つの有限表** `guard.table` で、テストが行ごとに固定する: loopback、
    private（RFC 1918）、link-local（クラウドメタデータを含む 169.254/16、fe80::/10）、
    site-local（fec0::/10）、unique-local（fc00::/7）、unspecified、broadcast、multicast、
-   shared address space（100.64/10）、予約ブロック 0/8・192.0.0/24・198.18/15・240/4。
+   shared address space（100.64/10）、予約ブロック 0/8・192.0.0/24・198.18/15・240/4・2001:2::/48。
    IPv4 を埋め込む IPv6 — IPv4-mapped、IPv4-compatible、NAT64（64:ff9b::/96 と
    64:ff9b:1::/48）、6to4（2002::/16）、Teredo（2001::/32、反転）— は取り出して埋め込み
    側を判定する。**1 つでも拒否アドレスがあれば応答全体を拒否する。** ポートは判定しない:
@@ -52,7 +52,8 @@ request forgery）のクラスはここで現実になる。モデルが、あ�
    含む `Location` を拒否し（`invalid_url`、ホップ付き）、http(s) 以外の scheme を拒否し
    （`scheme_not_allowed`）、ホップ数を上限で切る（`too_many_redirects`）。
 4. **クライアントは資格情報を持たない。** cookie jar 無し、`Authorization` 無し、呼び出し
-   側のヘッダ無し。userinfo は入力 URL でも redirect 先でも拒否する。
+   側のヘッダ無し。userinfo は入力 URL でも redirect 先でも拒否する。Go が redirect に付ける
+   `Referer` も削る: 送るのはこのツールが選んだヘッダだけである。
 5. **プロキシ環境変数は無視する**（`Transport.Proxy` は nil）。
 6. **`[network] allow_private = true` は既定探索パス上の設定ファイルからのみ有効。**
    `--config` / `WEB_FETCH_CONFIG` で届いたファイルに書かれていれば起動時エラー。フラグ

@@ -188,7 +188,7 @@ UTF-8 妥当性 → 既定 windows-1252。結果は `charset` / `charset_source`
    `img` は alt テキストのみ、`pre`/`code` はフェンス、`table` はパイプ行、
    `blockquote` は `>`。相対 URL は `<base href>` があればそれ、無ければ `final_url`
    基準で絶対化。
-4. 空白は行内で畳み、3 行以上の連続空行は 2 行に。
+4. 空白は行内で畳み、ブロック間の空行は 1 行に畳む。
 5. 題名は `<title>`、無ければ本文根の中の最初の `h1`。
 
 `text` は 3 の記法を付けない平文。本文根の選択は**発見的**であり、外したときの
@@ -290,7 +290,7 @@ ADR-0002 と gem-agent ADR-0017 がローカル fetch を却下した根拠は S
    | ULA | fc00::/7 |
    | unspecified / broadcast / multicast | 0.0.0.0, ::, 255.255.255.255, 224/4, ff00::/8 |
    | shared address space | 100.64/10 |
-   | 予約・試験 | 0/8, 192.0.0/24, 198.18/15, 240/4 |
+   | 予約・試験 | 0/8, 192.0.0/24, 198.18/15, 240/4, 2001:2::/48 |
    | 埋め込み IPv4 を取り出して再判定 | IPv4-mapped ::ffff:0:0/96、IPv4-compatible ::/96、NAT64 64:ff9b::/96 と 64:ff9b:1::/48、6to4 2002::/16（ビット 16–47）、Teredo 2001::/32（末尾 32 ビットを反転） |
 
    ポートは制限しない（`ip:port` のうち判定はアドレスだけ、意図的な選択）。
@@ -303,7 +303,8 @@ ADR-0002 と gem-agent ADR-0017 がローカル fetch を却下した根拠は S
    自動生成するため）、scheme が http(s) 以外なら `scheme_not_allowed`、
    ホップ数は `max_redirects`。
 4. **資格情報を持たない**: cookie jar 無し、Authorization 無し、任意ヘッダ無し、
-   URL の userinfo は入力でも redirect 先でも拒否。認証済みページは到達不能である
+   URL の userinfo は入力でも redirect 先でも拒否。Go が redirect に付ける Referer も
+   削る（送るのはこのツールが選んだヘッダだけ）。認証済みページは到達不能である
    ことが構造で決まる。
 5. **プロキシ環境変数を無視する**: プロキシ経由では解決先の判定が意味を失う。
 6. **`allow_private = true` は既定探索パスの設定ファイルからのみ有効。** `--config` /
@@ -556,8 +557,25 @@ Reason: 汎用のデータ取得プリミティブで、特定サービスの認
    は tier 1 ではなく tier 2; `fetch` サブコマンドの食い違い。LOW 5 件 — 依存の先例
    表現、`protocolVersion` の版、小さな仕様穴 9 点、キャッシュの規定、en 側の
    1 節欠落。採らなかった指摘: 無し。
-
-## 実装後の記録（2026-09-12、Phase 1 完了時の `make e2e` 実測）
+9. **リリース前独立検証（2026-09-12、実装に対して 15 件）**: HIGH 1 — 描画器がブロック境界
+   ごとに出力全体を再構築し O(n²)（4 MiB で 28 秒、既定 `max_bytes` 5 MiB の内側）→
+   `bytes.Buffer` の `Truncate` で末尾空白だけを削る形に書き換え、1 MiB / 4 MiB の比で線形性を
+   固定。MEDIUM 2 — `make e2e` が go test の失敗を `|| true` で隠す → ログをファイルに取り
+   終了コードを保持; 入れ子テーブルが外側の行にも平坦化され二重描画 → 直下の行だけを採り、
+   セル内の入れ子は「a / b; c / d」の 1 行に。LOW で採用 — IPv6 ゾーン除去を IP リテラルに
+   限定（`%` を含むホスト名が切り詰められていた）; 選択した根自身の `hidden`; `<li>` 以外の
+   リスト子要素の消失; `image/svg+xml` を `+xml` の許容から除外（`application/*+xml` のみ）;
+   dialer 由来の `timeout` にも `timeout` 詳細を付け `TLSHandshakeTimeout` を撤去; MCP 層の
+   `invalid_argument` に `details.argument`、`get_usage` は引数を受けたら拒否; redirect ホップ
+   に Go が付ける `Referer` を削除（ヘッダ方針に明記）; 規則 4 の文言を実装（空行 1 つ）に
+   合わせた; 拒否表に IPv6 ベンチマーク域 2001:2::/48（198.18/15 の対）を追加; テスト 5 種
+   （cross-host redirect のヘッダ保持、`//u:p@` 形の Location、`identity` / `x-gzip`、mapped
+   応答、描画のスケール）。**採らなかった指摘と理由**: dial の context に期限が無い
+   （Go の Transport が `WithoutCancel` で dial する仕様。要求全体は `Client.Timeout` で
+   `timeout` になることを確認済み — 挙動として受容）; 文書用ネット 192.0.2/24 等・2001:db8::/32・
+   100::/64・ORCHID の追加（攻撃者が到達可能なホストに経路が無い。テストは 2001:db8::1 を
+   公開として固定しており、フィクスチャが 203.0.113.x を使う）; `::ffff:0:0:0/96`（SIIT、
+   OS が loopback に写像しない）; タイムアウトテストの遅さ（安定性は 3 回 -race で確認済み）。
 
 - **§1 の「実ページ本文約 27k 字」は正規表現でタグを剥がした概算だった。** web-fetch の
   markdown 抽出では Go 1.26 リリースノートは **35,922 字**（リンク URL を保持するため）で、

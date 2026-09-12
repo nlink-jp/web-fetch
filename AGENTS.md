@@ -96,12 +96,12 @@ code trips over.
   runtime's project `.mcp.json` can name any file; it must not be able to open
   the LAN. `HOME` / `XDG_CONFIG_HOME` are the runtime's trust boundary.
 - **SSRF is a finite address table applied inside the dialer** (`guard.table`,
-  15 rows + 6 embeddings, every one pinned by a test row). The dialer resolves,
+  16 rows + 6 embeddings, every one pinned by a test row). The dialer resolves,
   judges every address, and connects to the vetted `ip:port` literal — never
   by name. One denied address denies the whole answer. `CheckRedirect` refuses
   a `Location` with userinfo (Go would synthesise `Authorization: Basic`) or a
-  non-http(s) scheme. Do not add URL-pattern or hostname rules; extend the
-  table and its test.
+  non-http(s) scheme, and deletes the `Referer` Go adds. Do not add
+  URL-pattern or hostname rules; extend the table and its test.
 - **No server-side spill.** The caller bounds the response with `max_chars` +
   `offset`; a cut is reported with `truncated` / `next_offset`; `doc_id` says
   whether page turns walk the same text; the runtime decides where a large
@@ -170,6 +170,22 @@ this a year from now.
   must stay inside JIS X 0208 (the decoder side is unaffected).
 - **A literal BOM character in Go source is a syntax error**; spell it
   `string(rune(0xFEFF))` in tests.
+- **Never rebuild the output buffer at a block boundary.** The first renderer
+  did `s := TrimRight(out.String()); out.Reset(); out.WriteString(s)` in
+  `breakBlock`, which is O(n²) in output size: 4 MiB took 28 s, inside the
+  default `max_bytes` (pre-release review, finding 1). The renderer now uses
+  `bytes.Buffer.Truncate` to drop trailing whitespace and reads the last byte
+  for line-start checks; `TestRenderingScalesLinearly` pins the ratio.
+- **A `go test … | grep … || true` recipe cannot fail.** `make e2e` now logs
+  the Go suite to `dist/e2e-go.log` and exits with its status.
+- **Review findings deliberately not taken** (pre-release review, 2026-09-12):
+  no deadline on the dial context (Go's Transport dials under
+  `WithoutCancel`; the request still ends in `timeout` via `Client.Timeout`);
+  the documentation nets 192.0.2/24, 198.51.100/24, 203.0.113/24,
+  2001:db8::/32, 100::/64 and ORCHID are not in the table (no route to an
+  attacker's host; tests pin 2001:db8::1 as public and fixtures use
+  203.0.113.x); `::ffff:0:0:0/96` (SIIT) is not unwrapped (no OS maps it to
+  loopback).
 
 - **lagent round trip (2026-09-12, lagent v0.3.0 + LM Studio Gemma 4 26B
   A4B QAT, isolated HOME / state, web-fetch registered in the global

@@ -204,7 +204,7 @@ EUC-JP and ISO-2022-JP are included (user decision: supported in v1).
    only, `pre`/`code` become fences, `table` becomes pipe rows, `blockquote`
    becomes `>`. Relative URLs resolve against `<base href>` when present,
    otherwise `final_url`.
-4. Whitespace is collapsed within lines; three or more blank lines become two.
+4. Whitespace is collapsed within lines; blank lines between blocks fold to one.
 5. The title is `<title>`, else the first `h1` inside the body root.
 
 `text` is the same without the markup of rule 3. Root selection is a
@@ -313,7 +313,7 @@ as URL patterns the defence becomes a rule over an infinite domain. Instead:
    | ULA | fc00::/7 |
    | unspecified / broadcast / multicast | 0.0.0.0, ::, 255.255.255.255, 224/4, ff00::/8 |
    | shared address space | 100.64/10 |
-   | reserved / benchmarking | 0/8, 192.0.0/24, 198.18/15, 240/4 |
+   | reserved / benchmarking | 0/8, 192.0.0/24, 198.18/15, 240/4, 2001:2::/48 |
    | embedded IPv4, unwrapped and re-judged | IPv4-mapped ::ffff:0:0/96, IPv4-compatible ::/96, NAT64 64:ff9b::/96 and 64:ff9b:1::/48, 6to4 2002::/16 (bits 16–47), Teredo 2001::/32 (last 32 bits inverted) |
 
    Ports are unrestricted (of `ip:port` only the address is judged — a
@@ -327,8 +327,9 @@ as URL patterns the defence becomes a rule over an infinite domain. Instead:
    it), a non-http(s) scheme → `scheme_not_allowed`, and hops are bounded by
    `max_redirects`.
 4. **No credentials**: no cookie jar, no Authorization, no arbitrary headers,
-   userinfo rejected in the input URL and in every redirect target. That
-   authenticated pages are unreachable is a structural fact.
+   userinfo rejected in the input URL and in every redirect target, and the
+   Referer Go adds on a redirect removed (only headers this tool chose are
+   sent). That authenticated pages are unreachable is a structural fact.
 5. **Proxy environment variables are ignored**: through a proxy the address
    judgment loses its meaning.
 6. **`allow_private = true` is honoured only in a config file on the default
@@ -616,6 +617,34 @@ as brave-search. lagent (lab-series) is a consumer, not the home.
    `protocolVersion` revision, nine small specification holes, the cache
    contract, one clause missing in the English mirror. Findings not taken:
    none.
+9. **Pre-release independent review (2026-09-12, 15 findings against the
+   implementation)**: HIGH 1 — the renderer rebuilt its whole output at every
+   block boundary, O(n²) (28 s for 4 MiB, inside the default 5 MiB
+   `max_bytes`) → rewritten to trim trailing whitespace with
+   `bytes.Buffer.Truncate`; linearity pinned by a 1 MiB / 4 MiB ratio test.
+   MEDIUM 2 — `make e2e` hid a failing `go test` behind `|| true` → the log
+   goes to a file and the status is kept; a nested table was flattened into
+   the outer rows and rendered again in its cell → only direct rows are taken
+   and a nested table inside a cell becomes one line ("a / b; c / d"). LOW,
+   taken — the IPv6 zone strip limited to IP literals (a host name containing
+   `%` was being truncated); the selected root's own `hidden`; list children
+   that are not `<li>` vanishing; `image/svg+xml` excluded from the `+xml`
+   allowance (`application/*+xml` only); dialer-raised `timeout` errors carry
+   the `timeout` detail and `TLSHandshakeTimeout` is dropped; the MCP layer's
+   `invalid_argument` carries `details.argument` and `get_usage` refuses
+   arguments; the `Referer` Go adds on redirect hops is removed (stated in the
+   header policy); rule 4 reworded to the implementation (one blank line);
+   the IPv6 benchmarking range 2001:2::/48 (the twin of 198.18/15) added to
+   the table; five test additions (cross-host redirect header carry,
+   `//u:p@` Locations, `identity` / `x-gzip`, mapped resolver answers,
+   rendering scale). **Not taken, with reasons**: no deadline on the dial
+   context (Go's Transport dials under `WithoutCancel`; the request as a whole
+   still ends in `timeout` through `Client.Timeout`, verified — accepted
+   behaviour); adding the documentation nets 192.0.2/24 etc., 2001:db8::/32,
+   100::/64 and ORCHID (no route to an attacker-controlled host; the tests pin
+   2001:db8::1 as public and the fixtures use 203.0.113.x);
+   `::ffff:0:0:0/96` (SIIT, mapped to loopback by no OS); the slowness of the
+   timeout tests (stable over three `-race` runs).
 
 ## Post-implementation record (2026-09-12, `make e2e` at the end of Phase 1)
 
