@@ -3,9 +3,6 @@
 URL 1 本をこのマシンから取得し、読める形のテキストにして返します。コマンドライン
 ツールとして、またエージェントランタイム向けのローカル MCP サーバとして動きます。
 
-> **状態: プレリリース。** 以下のコマンドはすべて動き、オフラインテストと live テストで
-> 覆われています。初回のタグ付きリリース、署名済みバイナリ、Homebrew formula はこれから。
-
 ```
 web-fetch https://go.dev/doc/go1.26                  # ページの Markdown 風テキスト
 web-fetch --format text --max-chars 3000 https://…   # 平文、先頭 3,000 文字
@@ -45,16 +42,13 @@ web-fetch mcp                                        # stdio の MCP サーバ: 
 
 ## インストール
 
-初回リリースまではソースから:
-
 ```bash
-git clone https://github.com/nlink-jp/web-fetch.git
-cd web-fetch
-make build          # → dist/web-fetch
+brew install nlink-jp/tap/web-fetch
 ```
 
-リリースでは署名・notarize 済みバイナリと Homebrew formula
-（`brew install nlink-jp/tap/web-fetch`）を配布します。
+または [releases](https://github.com/nlink-jp/web-fetch/releases) から署名・notarize
+済みバイナリを取得（darwin arm64 は zip、linux amd64 / arm64 は tar.gz、windows amd64
+は zip）、あるいはソースから `make build`（→ `dist/web-fetch`）。
 
 ## 使い方
 

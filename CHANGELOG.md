@@ -4,7 +4,9 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0] - 2026-09-12
+
+First release.
 
 ### Added
 
@@ -36,4 +38,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`unsupported_content_type`).
 - Configuration (`config.toml`, `WEB_FETCH_*`), Makefile, vendored org release
   scripts, live e2e suite (`make e2e`) and binary-level script.
-- RFP (rev.2) and project ADRs 0001–0003.
+- RFP (rev.2) and project ADRs 0001–0003; two independent reviews folded in
+  before this release (the second made the renderer linear in output size,
+  renders nested tables once, limits IPv6 zone handling to IP literals, drops
+  the `Referer` Go adds on redirects, refuses `image/svg+xml`, names the
+  argument in MCP `invalid_argument` errors, and keeps the Go suite's status
+  in `make e2e`).

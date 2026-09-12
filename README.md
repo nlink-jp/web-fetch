@@ -3,10 +3,6 @@
 Fetch one URL from this machine and get its readable text back — as a command
 line tool and as a local MCP server for agent runtimes.
 
-> **Status: pre-release.** Every command below works and is covered by offline
-> and live tests; the first tagged release, signed binaries and the Homebrew
-> formula are pending.
-
 ```
 web-fetch https://go.dev/doc/go1.26                  # markdown-ish text of the page
 web-fetch --format text --max-chars 3000 https://…   # plain text, first 3,000 characters
@@ -47,16 +43,14 @@ web-fetch mcp                                        # MCP server over stdio: to
 
 ## Install
 
-From source, until the first release:
-
 ```bash
-git clone https://github.com/nlink-jp/web-fetch.git
-cd web-fetch
-make build          # → dist/web-fetch
+brew install nlink-jp/tap/web-fetch
 ```
 
-Releases will ship signed and notarized binaries and a Homebrew formula
-(`brew install nlink-jp/tap/web-fetch`).
+Or take a signed and notarized binary from the
+[releases](https://github.com/nlink-jp/web-fetch/releases) — darwin arm64
+(zip), linux amd64 / arm64 (tar.gz), windows amd64 (zip) — or build from
+source with `make build` (→ `dist/web-fetch`).
 
 ## Usage
 
