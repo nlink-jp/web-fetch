@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Both MCP tool schemas now set `additionalProperties: false`, as
+  organization ADR-021 §10 requires. A validating client refuses a mistyped
+  argument instead of forwarding it; `mcp.DecodeArgs` already decoded
+  strictly, so the two halves of the contract now agree. Applied inside
+  `mcp.New`, the one place every tool passes through, so a tool added later
+  cannot omit it.
+
+### Added
+
+- `TestEveryToolSchemaIsClosed` and `TestClosedSchemaSurvivesTheWire` — the
+  arch assertion over the real tool set, checked both on the Go value and in
+  the `tools/list` JSON a client actually validates against.
+
 ## [0.1.0] - 2026-09-12
 
 First release.

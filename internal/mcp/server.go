@@ -42,16 +42,33 @@ type Server struct {
 	byName  map[string]Tool
 }
 
-// New builds a server over the given tools. get_usage is always present.
+// New builds a server over the given tools. get_usage is always present, and
+// every tool's schema is closed on the way in.
 func New(version string, tools ...Tool) *Server {
 	s := &Server{Version: version, byName: map[string]Tool{}}
 	all := append([]Tool{}, tools...)
 	all = append(all, usageTool())
 	for _, t := range all {
+		closeSchema(t.InputSchema)
 		s.tools = append(s.tools, t)
 		s.byName[t.Name] = t
 	}
 	return s
+}
+
+// closeSchema sets additionalProperties:false on a tool's top-level input
+// schema, as organization ADR-021 §10 requires. It is the client-side half of
+// the strictness DecodeArgs enforces here: the schema stops a mistyped
+// argument at a validating client, DecodeArgs stops it at the server.
+//
+// It is applied in New — the one place every tool passes through — rather than
+// written into each schema literal, so a tool added later cannot forget it.
+// Only the top level is touched; a nested object that deliberately accepts
+// free-form keys keeps whatever it declares.
+func closeSchema(schema map[string]any) {
+	if schema != nil {
+		schema["additionalProperties"] = false
+	}
 }
 
 // Tools returns the registered tool definitions, in tools/list order.

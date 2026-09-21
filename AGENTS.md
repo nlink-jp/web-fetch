@@ -134,6 +134,15 @@ code trips over.
   is dispatched as a fetch so `ftp://x` gets `scheme_not_allowed`, not "unknown
   command".
 - **No robots.txt, no digest, no search tiering** — user decisions (ADR-0002).
+- **Every tool schema is closed** (`additionalProperties: false`, organization
+  ADR-021 §10), and both halves of the contract are real: the schema stops a
+  mistyped argument at a validating client, `mcp.DecodeArgs` stops it at the
+  server (`TestMCPFetchRoundTrip` drives that end to end and asserts
+  `invalid_argument`). `closeSchema` is applied inside `mcp.New` — the one
+  place every tool passes through — so a tool added later cannot forget it;
+  only the top level is touched. The arch tests live in
+  `internal/app/schema_test.go`, not `internal/mcp`, for the same reason the
+  manual meta-tests do: `internal/mcp` on its own sees `get_usage` alone.
 
 ## Status
 
