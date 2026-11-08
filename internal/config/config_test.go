@@ -155,6 +155,75 @@ func TestUnknownKeysAndSectionsAreRejected(t *testing.T) {
 	}
 }
 
+// The reader is strict (code-audit run-2, 2026-11-08): it used to search and
+// slice, so text after a value or a header was dropped, a repeated section
+// or key silently won, and a present empty value read as "not set". Each
+// shape is a startup error now, so a mistake cannot fall back to a default
+// unnoticed — the promise config.example.toml makes.
+func TestMalformedLinesAreRejected(t *testing.T) {
+	for name, body := range map[string]string{
+		"text after a quoted value":   "[network]\nmax_redirects = \"0\" 5\n",
+		"key on the header line":      "[network] allow_private = true\n",
+		"text after a header":         "[network] x\nmax_redirects = 1\n",
+		"unterminated string":         "[fetch]\nformat = \"text\n",
+		"escape in a basic string":    "[fetch]\nuser_agent = \"a\\\"b\"\n",
+		"repeated section":            "[cache]\nttl = \"0\"\n[cache]\nttl = \"1h\"\n",
+		"repeated key":                "[cache]\nttl = \"0\"\nttl = \"1h\"\n",
+		"no value":                    "[fetch]\ntimeout =\n",
+		"comment for a value":         "[fetch]\ntimeout = # later\n",
+		"empty string for an integer": "[fetch]\nmax_chars = \"\"\n",
+		"empty string for a format":   "[fetch]\nformat = \"\"\n",
+		"empty string for a duration": "[fetch]\ntimeout = \"\"\n",
+		"empty string for a bool":     "[network]\nallow_private = \"\"\n",
+		"empty section name":          "[]\nformat = \"text\"\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := isolate(t)
+			writeFile(t, path, body)
+			_, err := Load("")
+			if err == nil {
+				t.Fatalf("accepted: %q", body)
+			}
+			t.Logf("%v", err)
+		})
+	}
+}
+
+// What strictness must not take away: comments after values and headers,
+// a '#' inside quotes, a literal backslash in '...', and the two keys whose
+// empty string has a documented meaning.
+func TestWellFormedShapesAreRead(t *testing.T) {
+	path := isolate(t)
+	writeFile(t, path, `
+[fetch] # the section
+format = "text" # trailing comment
+max_chars = 2000 # bare value, comment
+user_agent = 'probe\1 #not-a-comment'
+accept_language = ""
+
+[network]
+max_redirects = 3
+`)
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Fetch{Format: "text", MaxChars: 2000, Timeout: DefaultTimeout, MaxBytes: DefaultMaxBytes, UserAgent: "probe\\1 #not-a-comment", AcceptLanguage: ""}
+	if cfg.Fetch != want {
+		t.Errorf("fetch: got %+v, want %+v", cfg.Fetch, want)
+	}
+	if cfg.Network.MaxRedirects != 3 {
+		t.Errorf("network: %+v", cfg.Network)
+	}
+	// user_agent = "" is the default agent, as the example file says.
+	path = isolate(t)
+	writeFile(t, path, "[fetch]\nuser_agent = \"\"\nformat = \"text\"\n")
+	cfg, err = Load("")
+	if err != nil || cfg.Fetch.UserAgent != "" || cfg.Fetch.Format != "text" {
+		t.Errorf("empty user_agent: %v %+v", err, cfg.Fetch)
+	}
+}
+
 func TestEnvironmentOverridesTheFile(t *testing.T) {
 	path := isolate(t)
 	writeFile(t, path, "[fetch]\nmax_chars = 2000\nformat = \"text\"\ntimeout = \"5s\"\nmax_bytes = \"1MiB\"\n")

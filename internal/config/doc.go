@@ -14,5 +14,8 @@
 // not this package's.
 //
 // The sectioned-TOML reader is vendored from brave-search rather than
-// imported, matching the series.
+// imported, matching the series. It reads strictly — a malformed line, a
+// repeated section or key, or a key with no value is an error, and a present
+// key is applied as written, empty string included — because the file's own
+// promise is that a mistake cannot fall back to a default unnoticed.
 package config

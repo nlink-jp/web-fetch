@@ -90,6 +90,13 @@ code trips over.
   argument ↔ config key ↔ environment variable. Add a parameter there first;
   the surfaces derive from it. Not every parameter has every surface on
   purpose: `allow_private`, the redirect cap and the cache are file-only.
+- **The config reader is strict.** `parseTOML` refuses text after a value or
+  a `[section]` header (a `#` comment aside), an unclosed quote, a backslash
+  in a `"…"` string, a repeated section or key, and a key with no value; a
+  present key is applied as written, `""` included (`user_agent` /
+  `accept_language` mean it; a ranged key fails its parse). It used to search
+  and slice, so `[network] allow_private = true` on one line read as an empty
+  section (code-audit run-2). `TestMalformedLinesAreRejected` pins each shape.
 - **`[network] allow_private` is honoured only in a config file on the default
   search path.** A file named by `--config` or `WEB_FETCH_CONFIG` that sets it
   is a startup error (`internal/config`, tested from config, CLI and MCP). A

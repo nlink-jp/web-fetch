@@ -239,7 +239,10 @@ configuration error. `invalid_argument` and an `invalid_url` /
 The first of `$XDG_CONFIG_HOME/web-fetch/config.toml`,
 `~/.config/web-fetch/config.toml`, `~/Library/Application Support/web-fetch/config.toml`
 (the **default search path**). Optional. The sectioned-TOML subset reader is
-vendored from brave-search.
+vendored from brave-search and reads strictly: text after a value or a header,
+an unclosed or escaped string, a repeated section or key, or a key with no
+value is a startup error, and a present key is applied as written (`""`
+included) rather than read as absent.
 
 ```toml
 [fetch]

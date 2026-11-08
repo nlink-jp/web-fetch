@@ -8,6 +8,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The config file is read strictly.** The reader searched and sliced each
+  line, so text after a value or a `[section]` header was dropped (`[network]
+  allow_private = true` on one line read as an empty section), a repeated
+  section or key silently won, an unclosed quote was kept as text, and a key
+  with an empty value (`timeout =`, `max_chars = ""`) read as "not set" and
+  fell back to the default — the opposite of what the example file promises.
+  Each of those is a startup error now, with the line number. A key that is
+  present is applied as written: `user_agent = ""` and `accept_language = ""`
+  keep their documented meaning, `max_chars = ""` is not an integer. A
+  backslash inside a `"…"` string is refused (no escapes are implemented;
+  `'…'` takes it literally). Found by the code-audit skill's second run over
+  this repository.
 - **A failed fetch's error line is made inert on a terminal too.** The CLI
   made page text inert on stdout but wrote the error JSON to stderr as
   encoded, and that JSON quotes the remote side: the `Content-Type` it sent

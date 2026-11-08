@@ -6,7 +6,12 @@
 # Every setting is optional; the values shown are the built-in defaults.
 # Precedence: flag > WEB_FETCH_* environment variable > this file > built-in
 # default. Unknown sections or keys are rejected, so a typo cannot silently
-# fall back to a default.
+# fall back to a default — and so is anything else malformed: text after a
+# value or a [section] header (a "# comment" is fine), an unclosed quote, a
+# backslash inside a "..." string (write '...' for a literal), a section or key
+# given twice, or a key with no value. A key that is present is applied as
+# written: user_agent = "" and accept_language = "" mean what their comments
+# say, max_chars = "" is an error.
 #
 # This file holds no credential: web-fetch sends none. The one setting that
 # matters for safety is [network] allow_private, and it is honoured only when

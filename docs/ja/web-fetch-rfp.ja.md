@@ -221,7 +221,9 @@ UTF-8 妥当性 → 既定 windows-1252。結果は `charset` / `charset_source`
 `$XDG_CONFIG_HOME/web-fetch/config.toml` → `~/.config/web-fetch/config.toml` →
 `~/Library/Application Support/web-fetch/config.toml` の順で最初に見つかったもの
 （**既定探索パス**）。無くても動く。brave-search と同じ sectioned-TOML サブセット
-読み取りを vendoring する。
+読み取りを vendoring し、厳格に読む: 値や見出しの後ろの余り、閉じていない・
+エスケープを含む文字列、重複したセクションやキー、値のないキーは起動時エラー、
+書かれているキーは（`""` も含めて）書かれたとおりに適用し、未設定とは読まない。
 
 ```toml
 [fetch]

@@ -220,43 +220,59 @@ func applySections(cfg *Config, sections map[string]map[string]string) error {
 			}
 		}
 	}
+	// A key that is present is applied as written, an empty value included:
+	// `user_agent = ""` and `accept_language = ""` mean what the example file
+	// says they mean (the default agent, no header), and `max_chars = ""` is
+	// not an integer. Only an absent key leaves the default in place.
 	var err error
 	if f := sections["fetch"]; f != nil {
-		setString(&cfg.Fetch.Format, f["format"])
-		if err = setInt(&cfg.Fetch.MaxChars, f["max_chars"], "[fetch] max_chars"); err != nil {
-			return err
+		if v, ok := f["format"]; ok {
+			cfg.Fetch.Format = v // "" is refused by Validate
 		}
-		if v := f["timeout"]; v != "" {
+		if v, ok := f["max_chars"]; ok {
+			if cfg.Fetch.MaxChars, err = parseInt(v, "[fetch] max_chars"); err != nil {
+				return err
+			}
+		}
+		if v, ok := f["timeout"]; ok {
 			if cfg.Fetch.Timeout, err = ParseDuration(v); err != nil {
 				return fmt.Errorf("[fetch] timeout: %w", err)
 			}
 		}
-		if v := f["max_bytes"]; v != "" {
+		if v, ok := f["max_bytes"]; ok {
 			if cfg.Fetch.MaxBytes, err = ParseBytes(v); err != nil {
 				return fmt.Errorf("[fetch] max_bytes: %w", err)
 			}
 		}
-		setString(&cfg.Fetch.UserAgent, f["user_agent"])
-		setString(&cfg.Fetch.AcceptLanguage, f["accept_language"])
+		if v, ok := f["user_agent"]; ok {
+			cfg.Fetch.UserAgent = v
+		}
+		if v, ok := f["accept_language"]; ok {
+			cfg.Fetch.AcceptLanguage = v
+		}
 	}
 	if n := sections["network"]; n != nil {
-		if err = setInt(&cfg.Network.MaxRedirects, n["max_redirects"], "[network] max_redirects"); err != nil {
-			return err
+		if v, ok := n["max_redirects"]; ok {
+			if cfg.Network.MaxRedirects, err = parseInt(v, "[network] max_redirects"); err != nil {
+				return err
+			}
 		}
-		if v := n["allow_private"]; v != "" {
+		if v, ok := n["allow_private"]; ok {
 			if cfg.Network.AllowPrivate, err = parseBool(v); err != nil {
 				return fmt.Errorf("[network] allow_private: %w", err)
 			}
 		}
 	}
 	if c := sections["cache"]; c != nil {
-		if v := c["ttl"]; v != "" {
+		if v, ok := c["ttl"]; ok {
 			if cfg.Cache.TTL, err = parseDurationOrZero(v); err != nil {
 				return fmt.Errorf("[cache] ttl: %w", err)
 			}
 		}
-		if err = setInt(&cfg.Cache.MaxEntries, c["max_entries"], "[cache] max_entries"); err != nil {
-			return err
+		if v, ok := c["max_entries"]; ok {
+			if cfg.Cache.MaxEntries, err = parseInt(v, "[cache] max_entries"); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -281,10 +297,16 @@ func EnvVars() []string {
 	return []string{EnvConfig, EnvFormat, EnvMaxChars, EnvTimeout, EnvMaxBytes, EnvUserAgent, EnvAcceptLanguage}
 }
 
+// applyEnv overlays the WEB_FETCH_* variables. An empty variable is an
+// unset one here — a shell cannot tell them apart the way a file can.
 func applyEnv(cfg *Config) error {
 	setString(&cfg.Fetch.Format, os.Getenv(EnvFormat))
-	if err := setInt(&cfg.Fetch.MaxChars, os.Getenv(EnvMaxChars), EnvMaxChars); err != nil {
-		return err
+	if v := os.Getenv(EnvMaxChars); v != "" {
+		n, err := parseInt(v, EnvMaxChars)
+		if err != nil {
+			return err
+		}
+		cfg.Fetch.MaxChars = n
 	}
 	if v := os.Getenv(EnvTimeout); v != "" {
 		d, err := ParseDuration(v)
@@ -311,16 +333,12 @@ func setString(dst *string, v string) {
 	}
 }
 
-func setInt(dst *int, v, name string) error {
-	if v == "" {
-		return nil
-	}
+func parseInt(v, name string) (int, error) {
 	n, err := strconv.Atoi(strings.TrimSpace(v))
 	if err != nil {
-		return fmt.Errorf("%s: %q is not an integer", name, v)
+		return 0, fmt.Errorf("%s: %q is not an integer", name, v)
 	}
-	*dst = n
-	return nil
+	return n, nil
 }
 
 func parseBool(v string) (bool, error) {
@@ -439,9 +457,16 @@ func FindConfig() string {
 
 // parseTOML parses the minimal subset this tool needs: [section] headers and
 // key = value lines, where value is an optionally quoted string. Comments start
-// with '#'. It intentionally does not support arrays, nested tables, or typed
-// values. Vendored from the sibling tools rather than imported, matching the
-// series.
+// with '#'. It intentionally does not support arrays, nested tables, typed
+// values or backslash escapes. Vendored from the sibling tools rather than
+// imported, matching the series.
+//
+// It reads strictly, because the file's own promise is that a mistake cannot
+// fall back to a default unnoticed (config.example.toml): a line is a header
+// or a key = value, with nothing after the value but a comment; a quoted
+// string is closed; a section or a key appears once; a key has a value. A
+// first version searched and sliced instead, and `[network] allow_private =
+// true` on one line read as an empty [network] section (code-audit run-2).
 func parseTOML(r io.Reader) (map[string]map[string]string, error) {
 	sections := map[string]map[string]string{}
 	current := ""
@@ -461,10 +486,18 @@ func parseTOML(r io.Reader) (map[string]map[string]string, error) {
 			if end < 0 {
 				return nil, fmt.Errorf("line %d: unterminated section header", line)
 			}
-			current = strings.TrimSpace(raw[1:end])
-			if _, ok := sections[current]; !ok {
-				sections[current] = map[string]string{}
+			name := strings.TrimSpace(raw[1:end])
+			if name == "" {
+				return nil, fmt.Errorf("line %d: empty section name", line)
 			}
+			if rest := strings.TrimSpace(raw[end+1:]); rest != "" && rest[0] != '#' {
+				return nil, fmt.Errorf("line %d: unexpected text after [%s]: %q (a key goes on its own line)", line, name, rest)
+			}
+			if _, dup := sections[name]; dup {
+				return nil, fmt.Errorf("line %d: section [%s] appears twice", line, name)
+			}
+			current = name
+			sections[current] = map[string]string{}
 			continue
 		}
 		eq := strings.IndexByte(raw, '=')
@@ -472,9 +505,15 @@ func parseTOML(r io.Reader) (map[string]map[string]string, error) {
 			return nil, fmt.Errorf("line %d: expected key = value", line)
 		}
 		key := strings.TrimSpace(raw[:eq])
-		val := parseValue(strings.TrimSpace(raw[eq+1:]))
 		if key == "" {
 			return nil, fmt.Errorf("line %d: empty key", line)
+		}
+		val, err := parseValue(strings.TrimSpace(raw[eq+1:]))
+		if err != nil {
+			return nil, fmt.Errorf("line %d: %s: %w", line, key, err)
+		}
+		if _, dup := sections[current][key]; dup {
+			return nil, fmt.Errorf("line %d: key %s appears twice in [%s]", line, key, current)
 		}
 		sections[current][key] = val
 	}
@@ -484,17 +523,31 @@ func parseTOML(r io.Reader) (map[string]map[string]string, error) {
 	return sections, nil
 }
 
-// parseValue strips surrounding quotes, or trims a trailing inline comment from
-// a bare value.
-func parseValue(v string) string {
-	if len(v) >= 2 && (v[0] == '"' || v[0] == '\'') {
-		q := v[0]
-		if end := strings.IndexByte(v[1:], q); end >= 0 {
-			return v[1 : 1+end]
+// parseValue reads one value: a "..." or '...' string, which must be closed
+// and may be followed only by a comment, or a bare word up to a comment. A
+// backslash in a "..." string is refused rather than read as an escape this
+// reader does not implement; '...' takes it literally, as TOML does. No value
+// at all is an error — `key = ""` is how to write an empty string.
+func parseValue(v string) (string, error) {
+	if v == "" || v[0] == '#' {
+		return "", fmt.Errorf("no value (write key = \"\" for an empty string)")
+	}
+	if q := v[0]; q == '"' || q == '\'' {
+		end := strings.IndexByte(v[1:], q)
+		if end < 0 {
+			return "", fmt.Errorf("unterminated %c-quoted string", q)
 		}
+		s := v[1 : 1+end]
+		if q == '"' && strings.IndexByte(s, '\\') >= 0 {
+			return "", fmt.Errorf("backslash escapes are not supported in a \"...\" string; use '...' for a literal")
+		}
+		if rest := strings.TrimSpace(v[2+end:]); rest != "" && rest[0] != '#' {
+			return "", fmt.Errorf("unexpected text after the string: %q", rest)
+		}
+		return s, nil
 	}
 	if hash := strings.IndexByte(v, '#'); hash >= 0 {
 		v = strings.TrimSpace(v[:hash])
 	}
-	return v
+	return v, nil
 }

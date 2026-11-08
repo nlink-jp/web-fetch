@@ -88,6 +88,14 @@ is read; see [config.example.toml](config.example.toml) for every key and its
 default. Precedence: flag > `WEB_FETCH_*` environment variable > file >
 built-in default.
 
+The file is read strictly, so a mistake is a startup error rather than a
+silent default: an unknown section or key, text after a value or a `[section]`
+header (other than a `#` comment), an unclosed quote, a backslash in a `"…"`
+string (use `'…'` for a literal), a section or key written twice, or a key with
+no value. A key that is present is applied as written: `user_agent = ""` means
+the default agent and `accept_language = ""` means the header is not sent,
+while `max_chars = ""` or `format = ""` is an error.
+
 `[network] allow_private` is the one key with a rule of its own: it is honoured
 only in a file on that default search path. A file named by `--config` or
 `WEB_FETCH_CONFIG` that sets it is a startup error. The default search path is
