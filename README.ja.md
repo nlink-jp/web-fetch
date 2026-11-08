@@ -69,6 +69,9 @@ web-fetch mcp | version
 テキスト出力は題名、最終 URL、空行、本文の順です。切れたページは
 `[truncated: 0–6000 of 26946 chars; continue with --offset 6000]` で終わります。
 非 HTML の本体（text、JSON）はそのまま印字され、形式は `raw` と報告されます。
+標準出力が端末のときは、ページが題名や本文に仕込んだ制御文字（エスケープ
+シーケンス、C1、双方向制御）を `�` で表示し、`--json` では `\uXXXX` に
+エスケープします。パイプやファイルへの出力はそのままです。
 エラーは stderr に JSON オブジェクト `{code, message, details}` 1 つで出ます。
 
 ## 設定

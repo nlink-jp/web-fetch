@@ -141,6 +141,13 @@ code trips over.
   runtime's nonce wrap (ADR-0002 §4). Meta-tested.
 - **Tool results and `--json` are JSON without HTML escaping**
   (`SetEscapeHTML(false)`): the payload is page text.
+- **The page's words reach a terminal only through `inert`**
+  (`internal/app/terminal.go`). When stdout is a character device, the text
+  mode replaces C0 (except LF and TAB), DEL, C1 and the bidi overrides and
+  isolates with U+FFFD in the title, final URL and text, and `--json`
+  rewrites the same runes as `\uXXXX` after encoding. A pipe or file gets
+  the bytes verbatim, so `--format raw URL > file` is exact. Tests drive it
+  through a writer with a `Stat()` that reports a character device.
 - **Errors are one vocabulary** (`internal/toolerr`), surfaced by MCP as
   `{code, message, details}` and by the CLI as one JSON line on stderr. Exit
   codes: `invalid_argument` and an input-URL `invalid_url` /

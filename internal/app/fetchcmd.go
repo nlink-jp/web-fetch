@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -71,10 +72,15 @@ func runFetch(args []string, version string, stdout, stderr io.Writer) int {
 	if f.jsonOut {
 		return writeJSON(stdout, stderr, res)
 	}
-	fmt.Fprintln(stdout, res.Title)
-	fmt.Fprintln(stdout, res.FinalURL)
+	// The page's words reach the terminal only through inert (terminal.go).
+	show := func(s string) string { return s }
+	if isTerminal(stdout) {
+		show = inert
+	}
+	fmt.Fprintln(stdout, show(res.Title))
+	fmt.Fprintln(stdout, show(res.FinalURL))
 	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, res.Text)
+	fmt.Fprintln(stdout, show(res.Text))
 	if res.Truncated {
 		fmt.Fprintf(stdout, "\n[truncated: %d–%d of %d chars; continue with --offset %d]\n",
 			res.Offset, res.NextOffset, res.TotalChars, res.NextOffset)
@@ -104,12 +110,21 @@ func failFetch(stderr io.Writer, err error) int {
 }
 
 // writeJSON prints a result as indented JSON, without HTML escaping: the
-// payload is page text.
+// payload is page text. On a terminal the control runes the encoder leaves
+// raw are written as \uXXXX escapes (terminal.go).
 func writeJSON(stdout, stderr io.Writer, v any) int {
-	enc := json.NewEncoder(stdout)
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(v); err != nil {
+		return fail(stderr, exitError, "%v", err)
+	}
+	b := buf.Bytes()
+	if isTerminal(stdout) {
+		b = inertJSON(b)
+	}
+	if _, err := stdout.Write(b); err != nil {
 		return fail(stderr, exitError, "%v", err)
 	}
 	return exitOK

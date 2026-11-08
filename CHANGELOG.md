@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Page text printed to a terminal is made inert.** The CLI wrote a page's
+  title and text to stdout as fetched, so escape sequences a page carried
+  (screen clears, OSC window titles and hyperlinks, clipboard writes where
+  the terminal allows them) and bidi overrides were interpreted by the
+  operator's terminal. When stdout is a terminal, C0 (except newline and
+  tab), DEL, C1 and the bidi controls in the title, final URL and text are
+  now shown as U+FFFD, and `--json` writes them as `\uXXXX` escapes; output
+  to a pipe or file is unchanged. Found by the code-audit skill's first run
+  over this repository.
 - **A page's `<base href="javascript:…">` can no longer put a `javascript:`
   URL into a markdown link.** The renderer judged an href's scheme before
   resolving it against the base, so a fragment- or query-only href (`#top`,

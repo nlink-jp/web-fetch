@@ -72,6 +72,9 @@ web-fetch mcp | version
 The text output is the title, the final URL, a blank line and the text; a cut
 page ends with `[truncated: 0–6000 of 26946 chars; continue with --offset 6000]`.
 A non-HTML body (text, JSON) is printed as is and reported as format `raw`.
+When stdout is a terminal, control characters a page put in its title or text
+(escape sequences, C1 and bidi controls) are shown as `�`, and `--json`
+writes them as `\uXXXX` escapes; to a pipe or a file the text is verbatim.
 Errors go to stderr as one JSON object `{code, message, details}`.
 
 ## Configuration
