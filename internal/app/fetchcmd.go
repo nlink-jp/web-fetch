@@ -90,7 +90,10 @@ func runFetch(args []string, version string, stdout, stderr io.Writer) int {
 
 // failFetch prints the structured error as one JSON line on stderr and maps
 // it onto the exit contract: argument and input-URL errors are usage errors
-// (2); everything else is a failed fetch (1).
+// (2); everything else is a failed fetch (1). The error carries the remote
+// side's words too — the final URL its redirects chose, the Content-Type it
+// sent — so on a terminal the line goes through the same gate as --json
+// (terminal.go).
 func failFetch(stderr io.Writer, err error) int {
 	code := exitFetch
 	switch toolerr.Code(err) {
@@ -104,6 +107,9 @@ func failFetch(stderr io.Writer, err error) int {
 	b, merr := json.Marshal(mcp.StructuredError(err))
 	if merr != nil {
 		return fail(stderr, code, "%v", err)
+	}
+	if isTerminal(stderr) {
+		b = inertJSON(b)
 	}
 	fmt.Fprintf(stderr, "%s\n", b)
 	return code

@@ -146,8 +146,11 @@ code trips over.
   mode replaces C0 (except LF and TAB), DEL, C1 and the bidi overrides and
   isolates with U+FFFD in the title, final URL and text, and `--json`
   rewrites the same runes as `\uXXXX` after encoding. A pipe or file gets
-  the bytes verbatim, so `--format raw URL > file` is exact. Tests drive it
-  through a writer with a `Stat()` that reports a character device.
+  the bytes verbatim, so `--format raw URL > file` is exact. stderr is the
+  other egress: `failFetch`'s error JSON quotes the remote `Content-Type` and
+  final URL, so it takes the same `inertJSON` on a terminal, and `fail`'s
+  line takes `inert` (code-audit run-2). Tests drive both through a writer
+  with a `Stat()` that reports a character device.
 - **A tool handler that panics answers `internal_error`, not a dead
   server.** `mcp.callTool` recovers, returns an `isError` result whose
   message names a defect in web-fetch (the panic value stays out of it) and

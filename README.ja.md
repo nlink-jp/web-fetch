@@ -74,6 +74,8 @@ web-fetch mcp | version
 シーケンス、C1、双方向制御）を `�` で表示し、`--json` では `\uXXXX` に
 エスケープします。パイプやファイルへの出力はそのままです。
 エラーは stderr に JSON オブジェクト `{code, message, details}` 1 つで出ます。
+stderr が端末のときは、その中の同じ文字（エラーはサイトの `Content-Type` や
+リダイレクト先の URL を引用します）も同じようにエスケープします。
 
 ## 設定
 

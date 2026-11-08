@@ -76,7 +76,9 @@ A non-HTML body (text, JSON) is printed as is and reported as format `raw`.
 When stdout is a terminal, control characters a page put in its title or text
 (escape sequences, C1 and bidi controls) are shown as `�`, and `--json`
 writes them as `\uXXXX` escapes; to a pipe or a file the text is verbatim.
-Errors go to stderr as one JSON object `{code, message, details}`.
+Errors go to stderr as one JSON object `{code, message, details}`; when stderr
+is a terminal, the same characters in it (an error quotes the site's
+`Content-Type` or the URL its redirects chose) are escaped the same way.
 
 ## Configuration
 

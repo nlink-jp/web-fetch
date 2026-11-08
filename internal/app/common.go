@@ -73,7 +73,14 @@ func parseCommand(fs *flag.FlagSet, args []string, stdout, stderr io.Writer) (po
 }
 
 // fail prints a one-line error in the tool's voice and returns the code.
+// fail prints one line of web-fetch's own words on stderr. The words may
+// quote an error, and an error may quote remote text, so a terminal gets the
+// line made inert (terminal.go) like every other egress.
 func fail(stderr io.Writer, code int, format string, args ...any) int {
-	fmt.Fprintf(stderr, "web-fetch: "+format+"\n", args...)
+	msg := fmt.Sprintf("web-fetch: "+format, args...)
+	if isTerminal(stderr) {
+		msg = inert(msg)
+	}
+	fmt.Fprintln(stderr, msg)
 	return code
 }

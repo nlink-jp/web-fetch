@@ -153,3 +153,68 @@ func TestPageTextIsInertOnATerminalAndVerbatimOnAPipe(t *testing.T) {
 		t.Errorf("piped JSON is not verbatim: %q", jpipe.String())
 	}
 }
+
+// stderr is an egress too (code-audit run-2, 2026-11-08): a failed fetch's
+// error JSON quotes the remote Content-Type and final URL, and it reached a
+// terminal as encoded — C1 and bidi controls raw.
+func TestErrorJSONIsInertOnATerminalAndVerbatimOnAPipe(t *testing.T) {
+	isolate(t)
+	allowPrivateConfig(t, "")
+	// A refused media type whose header carries a RIGHT-TO-LEFT OVERRIDE
+	// and a C1 CSI: textproto accepts bytes >= 0x80 in a header value.
+	const hostileType = "application/pdf\u202e fdp/noitacilppa\u009b"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", hostileType)
+		fmt.Fprint(w, "%PDF-1.4")
+	}))
+	t.Cleanup(srv.Close)
+
+	var out strings.Builder
+	var term tty
+	if code := run([]string{srv.URL + "/"}, "v9", strings.NewReader(""), &out, &term); code != exitFetch {
+		t.Fatalf("code=%d stderr=%q", code, term.String())
+	}
+	errLine := term.String()
+	for _, bad := range []string{"\u202e", "\u009b"} {
+		if strings.Contains(errLine, bad) {
+			t.Errorf("terminal stderr carries %q: %q", bad, errLine)
+		}
+	}
+	for _, e := range []string{esc(0x202e), esc(0x9b)} {
+		if !strings.Contains(errLine, e) {
+			t.Errorf("terminal stderr lacks %s: %q", e, errLine)
+		}
+	}
+	var e map[string]any
+	if err := json.Unmarshal([]byte(errLine), &e); err != nil || e["code"] != "unsupported_content_type" {
+		t.Errorf("stderr is not the error JSON: %v %q", err, errLine)
+	}
+	if d, _ := e["details"].(map[string]any); d["content_type"] != hostileType {
+		t.Errorf("the escapes must decode back to the header: %v", e["details"])
+	}
+
+	var pipe strings.Builder
+	if code := run([]string{srv.URL + "/"}, "v9", strings.NewReader(""), &out, &pipe); code != exitFetch {
+		t.Fatalf("code=%d stderr=%q", code, pipe.String())
+	}
+	if !strings.Contains(pipe.String(), hostileType) {
+		t.Errorf("piped stderr is not verbatim: %q", pipe.String())
+	}
+}
+
+// web-fetch's own one-line messages quote errors, and an error may quote
+// remote text, so fail takes the same gate.
+func TestFailLineIsInertOnATerminal(t *testing.T) {
+	var term tty
+	if code := fail(&term, exitError, "config %s: %v", "x.toml", "\u202ereversed\x1b[2J"); code != exitError {
+		t.Fatalf("code=%d", code)
+	}
+	if term.String() != "web-fetch: config x.toml: �reversed�[2J\n" {
+		t.Errorf("terminal: %q", term.String())
+	}
+	var pipe strings.Builder
+	fail(&pipe, exitError, "%s", "\u202eraw")
+	if pipe.String() != "web-fetch: \u202eraw\n" {
+		t.Errorf("pipe: %q", pipe.String())
+	}
+}

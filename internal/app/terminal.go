@@ -15,7 +15,9 @@ import (
 // what the operator sees. When stdout is a terminal, everything the page
 // authored goes through one function that makes it inert; to a pipe or a
 // file the text stays verbatim, so `web-fetch --format raw URL > file`
-// keeps every byte.
+// keeps every byte. stderr is an egress too: a failed fetch's error JSON
+// quotes the remote side (its Content-Type, the URL its redirects chose), so
+// it passes the same gate when stderr is a terminal.
 
 // isTerminal reports whether w is an interactive terminal: a character
 // device, which is what os.Stdout is on a tty and what a pipe or file is not.

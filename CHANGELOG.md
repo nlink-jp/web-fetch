@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A failed fetch's error line is made inert on a terminal too.** The CLI
+  made page text inert on stdout but wrote the error JSON to stderr as
+  encoded, and that JSON quotes the remote side: the `Content-Type` it sent
+  (`details.content_type`) and the URL its redirects chose
+  (`details.final_url`, and the message). `encoding/json` leaves C1 and the
+  bidi controls raw, so a site could reorder what the operator read in the
+  error line. When stderr is a terminal, the error JSON now gets the same
+  `\uXXXX` escapes as `--json` on stdout, and web-fetch's own one-line
+  messages are made inert the same way; to a pipe the bytes are unchanged.
+  Found by the code-audit skill's second run over this repository.
 - **A page's `<meta http-equiv="content-type">` can no longer end the MCP
   server.** The charset prescan lower-cased the attribute with
   `strings.ToLower` and applied the index it found to the original string;
