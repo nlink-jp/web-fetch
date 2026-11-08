@@ -20,7 +20,9 @@ web-fetch mcp                                        # MCP server over stdio: to
   text, and JSON. PDFs, images and other binaries are refused with a clear error.
 - Bounds every response: `--max-chars` (default 6,000) and `--offset` page
   through the whole text; a cut result says so (`truncated`, `next_offset`) and
-  carries a `doc_id` so you can tell when the page changed between pages.
+  carries a `doc_id` so you can tell when the page changed between pages. A
+  page whose nested quotes or lists would render to many times its own size
+  is refused (`too_large`) instead of filling memory.
 - Reports what it found: final URL, HTTP status, content type, the charset it
   used and how it decided, the title, total length.
 

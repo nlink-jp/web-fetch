@@ -8,6 +8,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A page's nested blocks can no longer render to many times its size.**
+  Markdown rendering gives every line one prefix per enclosing blockquote or
+  list item, so hundreds of nested levels around many short lines — within
+  the default `max_bytes` — rendered to about a gigabyte, with far more copying
+  on the way, before the engine paged it. Rendering now shares one byte budget
+  across every nesting level (16 x the decoded size + 1 MiB of writes, 4 x +
+  1 MiB of text) and such a page is refused as `too_large`
+  (`details.render_limit`) within a fraction of a second. An `<ol start>`
+  value is honoured only within nine digits, because the marker's width
+  indents every continuation line. Found by the code-audit skill's first run
+  over this repository.
 - **`make verify-release` now fails closed.** Its last block chained unzip, the
   packaged binary's `--version` and `spctl` with `&&` and ended the whole chain
   in `|| true`, so a zip that did not unpack or a binary that did not run exited

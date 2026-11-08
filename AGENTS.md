@@ -110,6 +110,15 @@ code trips over.
 - **`max_bytes` applies to the decoded stream** (`io.LimitReader(max+1)`);
   `Content-Length` is never trusted; a non-gzip `Content-Encoding` is refused;
   an exact fit is not an overflow.
+- **Rendering has a budget of its own** (`extract.renderLimits`): every
+  write of every sub-renderer is charged to one allowance of 16 x the decoded
+  size + 1 MiB, and the rendered text may not pass 4 x + 1 MiB; over either,
+  `Extract` returns `too_large` with `details.render_limit`. Nested
+  blockquotes and list items put one prefix per level on every line, so a
+  page can render to lines x depth bytes — 509 levels around a million short
+  lines fit the default `max_bytes` and rendered to about 1 GiB. `<ol start>`
+  is honoured only within nine digits for the same reason (the marker's width
+  indents every continuation line). `internal/extract/budget_test.go` pins it.
 - **Charset order is the library's (WHATWG)**: BOM → header → meta prescan
   (first 1,024 bytes, stops at `<body>`) → UTF-8 validity → windows-1252,
   reported in `charset` / `charset_source`. `charset_unsupported` fires only

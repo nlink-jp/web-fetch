@@ -22,7 +22,7 @@ const (
 	CodeTimeout                = "timeout"                  // the deadline passed, a stalled body read included
 	CodeTooManyRedirects       = "too_many_redirects"       // over [network] max_redirects
 	CodeHTTPStatus             = "http_status"              // a non-2xx response, a 3xx without Location included
-	CodeTooLarge               = "too_large"                // the decoded body passed [fetch] max_bytes
+	CodeTooLarge               = "too_large"                // the decoded body passed [fetch] max_bytes, or its rendering passed the render budget
 	CodeUnsupportedContentType = "unsupported_content_type" // a refused media type, or a non-gzip Content-Encoding
 	CodeCharsetUnsupported     = "charset_unsupported"      // a declared charset label unknown to the decoder table
 )

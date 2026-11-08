@@ -28,7 +28,9 @@ max_chars = 6000
 timeout = "20s"
 
 # Most bytes read from a response after decompression, 64KiB-50MiB. Over it the
-# fetch fails with too_large; nothing is truncated. Environment: WEB_FETCH_MAX_BYTES
+# fetch fails with too_large; nothing is truncated. The markdown / text rendering
+# is bounded from it too (4 x the decoded size + 1 MiB): a page whose nested
+# blocks render to more fails with too_large as well. Environment: WEB_FETCH_MAX_BYTES
 max_bytes = "5MiB"
 
 # Accept-Language header. Empty = not sent. Example: "ja, en;q=0.8"

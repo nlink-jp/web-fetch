@@ -41,9 +41,26 @@ func Extract(decoded string, page *url.URL, format string) (Result, error) {
 			root = body
 		}
 	}
-	r := &renderer{markdown: format != FormatText, base: baseURL(doc, page)}
+	writeLimit, textLimit := renderLimits(len(decoded))
+	r := &renderer{markdown: format != FormatText, base: baseURL(doc, page), budget: &budget{left: writeLimit}}
 	r.walk(root)
+	if r.budget.exhausted || r.out.Len() > textLimit {
+		return Result{}, toolerr.Newf(toolerr.CodeTooLarge,
+			"the page renders to more than %d bytes of %s: its nested blocks multiply the text far past the %d bytes fetched", textLimit, format, len(decoded)).
+			With("render_limit", textLimit).With("decoded_bytes", len(decoded))
+	}
 	return Result{Title: titleOf(doc, root), Text: tidy(r.out.String())}, nil
+}
+
+// renderLimits derives the two bounds of one render from the decoded size.
+// writeLimit caps the bytes written across every renderer (the work done:
+// each nesting level copies its content once, and a legitimate page nests a
+// handful of levels); textLimit caps the rendered text itself (what the
+// engine then pages by runes, at four bytes each). Both are a multiple of
+// the input plus a floor, so a tiny page with a long table or list is not
+// refused. See budget.
+func renderLimits(decoded int) (writeLimit, textLimit int) {
+	return 16*decoded + 1<<20, 4*decoded + 1<<20
 }
 
 // DocID identifies a decoded body: "sha256:" plus the hex digest. Two page

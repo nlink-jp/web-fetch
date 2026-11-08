@@ -21,19 +21,66 @@ import (
 // removed with Truncate, which costs the whitespace's length, not the
 // output's. (A first draft rebuilt the buffer at every block boundary and
 // took 28 s on a 4 MiB page — pre-release review, finding 1.)
+//
+// Every write, in the root and in every sub-renderer, is charged to one
+// shared budget (see budget): the bytes written are the work done, and a
+// page can make them grow faster than its own size.
 type renderer struct {
 	markdown bool
 	base     *url.URL
 	inCell   bool // inside a table cell: a nested table renders compactly
+	budget   *budget
 	out      bytes.Buffer
 }
 
+// budget is the byte allowance one Extract call shares between its
+// renderers. The rendered text of a page is normally smaller than its HTML,
+// and nested blocks copy their content once per level, so a legitimate page
+// stays far below the allowance. A page nesting hundreds of blockquotes or
+// list items around many short lines does not: every line carries one
+// prefix per level, so the output grows as lines x depth and the copying as
+// lines x depth², far past max_bytes. The budget ends such a render early,
+// and Extract reports it as too_large.
+type budget struct {
+	left      int
+	exhausted bool
+}
+
+// charge spends n bytes; false once the allowance is gone.
+func (b *budget) charge(n int) bool {
+	if b.exhausted {
+		return false
+	}
+	b.left -= n
+	if b.left < 0 {
+		b.exhausted = true
+		return false
+	}
+	return true
+}
+
 func (r *renderer) sub() *renderer {
-	return &renderer{markdown: r.markdown, base: r.base, inCell: r.inCell}
+	return &renderer{markdown: r.markdown, base: r.base, inCell: r.inCell, budget: r.budget}
+}
+
+// write appends s, charged to the budget; nothing is written once it is
+// exhausted, so the buffers stop growing the moment the render is doomed.
+func (r *renderer) write(s string) {
+	if !r.budget.charge(len(s)) {
+		return
+	}
+	r.out.WriteString(s)
+}
+
+func (r *renderer) writeByte(c byte) {
+	if !r.budget.charge(1) {
+		return
+	}
+	r.out.WriteByte(c)
 }
 
 func (r *renderer) walk(n *html.Node) {
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
+	for c := n.FirstChild; c != nil && !r.budget.exhausted; c = c.NextSibling {
 		r.node(c)
 	}
 }
@@ -103,11 +150,11 @@ func (r *renderer) element(n *html.Node) {
 		}
 		r.block(content)
 	case atom.Br:
-		r.out.WriteByte('\n')
+		r.writeByte('\n')
 	case atom.Hr:
 		r.breakBlock()
 		if r.markdown {
-			r.out.WriteString("---")
+			r.write("---")
 		}
 		r.breakBlock()
 	case atom.Ul, atom.Ol:
@@ -168,7 +215,7 @@ func (r *renderer) text(s string, raw bool) {
 	if s[0] == ' ' && r.atLineStart() {
 		s = s[1:]
 	}
-	r.out.WriteString(s)
+	r.write(s)
 }
 
 // atLineStart looks at the last byte only.
@@ -234,7 +281,7 @@ func (r *renderer) breakBlock() {
 	if r.out.Len() == 0 {
 		return
 	}
-	r.out.WriteString("\n\n")
+	r.write("\n\n")
 }
 
 // ensureNewline ends the current line without opening a blank one.
@@ -245,13 +292,13 @@ func (r *renderer) ensureNewline() {
 		return
 	}
 	if b[len(b)-1] != '\n' {
-		r.out.WriteByte('\n')
+		r.writeByte('\n')
 	}
 }
 
 func (r *renderer) block(text string) {
 	r.breakBlock()
-	r.out.WriteString(text)
+	r.write(text)
 	r.breakBlock()
 }
 
@@ -303,6 +350,9 @@ func (r *renderer) resolve(href string) string {
 	return u.String()
 }
 
+// maxListStart bounds the <ol start> values honoured: nine digits and a sign.
+const maxListStart = 1_000_000_000
+
 // list renders <ul>/<ol>. A list that follows inline text on the same line
 // (an item's own text before its nested list) starts on the next line, not
 // after a blank one, so nesting stays tight. Children that are not <li>
@@ -311,7 +361,10 @@ func (r *renderer) list(n *html.Node) {
 	ordered := n.DataAtom == atom.Ol
 	index := 1
 	if s := attr(n, "start"); s != "" {
-		if v, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
+		// The marker's width indents every continuation line of every
+		// item, so a start value is honoured only within a width no real
+		// list exceeds; anything wider counts from 1.
+		if v, err := strconv.Atoi(strings.TrimSpace(s)); err == nil && v > -maxListStart && v < maxListStart {
 			index = v
 		}
 	}
@@ -349,12 +402,12 @@ func (r *renderer) listItem(li *html.Node, marker string) {
 	for i, l := range lines {
 		switch {
 		case i == 0:
-			r.out.WriteString(marker + l)
+			r.write(marker + l)
 		case l == "":
 		default:
-			r.out.WriteString(indent + l)
+			r.write(indent + l)
 		}
-		r.out.WriteByte('\n')
+		r.writeByte('\n')
 	}
 }
 
