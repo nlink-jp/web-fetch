@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The Linux archives no longer record the builder's user and group names.**
+  macOS `tar` stores each staging file's owner names (`magi:wheel`-style) in
+  the archive headers unless told otherwise, so every published `.tar.gz`
+  carried the release machine's login. `make package` now passes `--uid 0
+  --gid 0 --uname root --gname root`, and `make verify-release` fails any
+  Linux archive whose members are not owned by `root:root` (0:0). Found by
+  the code-audit skill's first run over this repository.
 - **Release binaries no longer embed the builder's home directory.** Every
   `go build` in the Makefile ran without `-trimpath`, so each published
   binary recorded the absolute paths of the checkout and the module cache —

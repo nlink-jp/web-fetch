@@ -62,7 +62,9 @@ e2e: build
 ## darwin/windows, tar.gz for linux), bundle the canonical binary +
 ## README.md + LICENSE, and notarize the darwin build. Asset naming
 ## follows the org Release Archive Standard
-## (web-fetch-vX.Y.Z-<os>-<arch>.<ext>).
+## (web-fetch-vX.Y.Z-<os>-<arch>.<ext>). The linux archives record
+## root/root (0/0) as every member's owner: bsdtar otherwise stores the
+## builder's login and group names from the staging files.
 package: build-all
 	@cd dist && for p in $(PLATFORMS); do os=$${p%/*}; arch=$${p#*/}; \
 		ext=""; [ "$$os" = windows ] && ext=".exe"; \
@@ -70,7 +72,7 @@ package: build-all
 		cp "$(BINARY)-$$os-$$arch$$ext" "$$stage/$(BINARY)$$ext"; \
 		cp ../README.md ../LICENSE $$stage/; \
 		base="$(BINARY)-$(VERSION)-$$os-$$arch"; \
-		if [ "$$os" = linux ]; then ( cd $$stage && COPYFILE_DISABLE=1 tar --no-xattrs -czf "../$$base.tar.gz" * ); \
+		if [ "$$os" = linux ]; then ( cd $$stage && COPYFILE_DISABLE=1 tar --no-xattrs --uid 0 --gid 0 --uname root --gname root -czf "../$$base.tar.gz" * ); \
 		else ( cd $$stage && zip -q "../$$base.zip" * ); fi; \
 		rm -rf $$stage; \
 	done
@@ -79,8 +81,9 @@ package: build-all
 ## verify-release: refuse to release a zip that is un-notarized, stale, does
 ## not unpack, does not run, or holds a build from another tag, a binary that
 ## embeds the builder's home directory (a build without -trimpath), and a
-## linux archive that carries macOS metadata or anything but its canonical
-## files. Every step fails closed; only the spctl line is informational.
+## linux archive that carries macOS metadata, the builder's owner names, or
+## anything but its canonical files. Every step fails closed; only the spctl
+## line is informational.
 verify-release:
 	@test -f "dist/$(BINARY)-$(VERSION)-darwin-arm64.zip.notarized" || { \
 		echo "verify-release: FAIL — $(BINARY)-$(VERSION)-darwin-arm64.zip has no notarization marker."; \
@@ -121,6 +124,12 @@ verify-release:
 			echo "verify-release: FAIL — $$f carries extended attributes as pax headers ($$xh)."; \
 			echo "  macOS tar writes them unless called with --no-xattrs; COPYFILE_DISABLE alone does not."; \
 			exit 1; fi; \
+		own=$$(python3 -c 'import sys, tarfile; print(" ".join("%s(%s:%s %s:%s)" % (m.name, m.uid, m.gid, m.uname, m.gname) for m in tarfile.open(sys.argv[1]) if (m.uid, m.gid, m.uname, m.gname) != (0, 0, "root", "root")))' "$$f") || { \
+			echo "verify-release: FAIL — $$f cannot be read for its owner fields (python3 tarfile)."; exit 1; }; \
+		if [ -n "$$own" ]; then \
+			echo "verify-release: FAIL — $$f records the builder as owner ($$own)."; \
+			echo "  make package passes --uid 0 --gid 0 --uname root --gname root to tar; this archive was made another way."; \
+			exit 1; fi; \
 		got=$$(printf '%s\n' "$$names" | LC_ALL=C sort | tr '\n' ' '); \
 		want=$$(printf '%s\n' "$(BINARY)" README.md LICENSE | LC_ALL=C sort | tr '\n' ' '); \
 		if [ "$$got" != "$$want" ]; then \
@@ -133,7 +142,7 @@ verify-release:
 			echo "  It was built without -trimpath (re-run make package)."; rm -rf "$$tmp"; exit 1; fi; \
 		rm -rf "$$tmp"; \
 	done
-	@echo "verify-release: OK ($(VERSION), notarized, unpacks, runs, reports its version, no builder paths, clean linux archives)"
+	@echo "verify-release: OK ($(VERSION), notarized, unpacks, runs, reports its version, no builder paths or owners, clean linux archives)"
 
 ## clean: Remove build artifacts
 clean:
