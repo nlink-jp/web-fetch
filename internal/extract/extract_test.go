@@ -301,7 +301,9 @@ func TestLinkSchemesAreAllowListedAfterResolution(t *testing.T) {
 // in its query and path, and the anchor text is the page's own words: either
 // could end the destination or the text early and open a second link whose
 // target never passed linkScheme. Text and destination are escaped so every
-// link in the output is one the renderer made.
+// link in the output is one the renderer made; a "<" in the text is escaped
+// too, since <javascript:…> is a CommonMark autolink and raw HTML in link
+// text wins over the link grammar.
 func TestLinkTextAndDestinationCannotEndTheLink(t *testing.T) {
 	cases := []struct{ name, html, want string }{
 		{"query that closes the destination", `<a href="?)[x](javascript:alert(1)">t</a>`,
@@ -311,6 +313,11 @@ func TestLinkTextAndDestinationCannotEndTheLink(t *testing.T) {
 		{"text that closes the link", `<a href="/q">a](javascript:b)[c</a>`,
 			`[a\](javascript:b)\[c](https://site.example/q)`},
 		{"text ending in a backslash", `<a href="/q">a\</a>`, `[a\\](https://site.example/q)`},
+		{"text that is an autolink", `<a href="/q">&lt;javascript:alert(1)&gt;</a>`,
+			`[\<javascript:alert(1)>](https://site.example/q)`},
+		{"text that is raw HTML", `<a href="/q">&lt;a href="javascript:x"&gt;y&lt;/a&gt;</a>`,
+			`[\<a href="javascript:x">y\</a>](https://site.example/q)`},
+		{"code in link text keeps its span", `<a href="/q"><code>f()</code></a>`, "[`f()`](https://site.example/q)"},
 		{"empty text falls back to the href, escaped as text", `<a href="/p(1)"></a>`,
 			"[https://site.example/p(1)](https://site.example/p%281%29)"},
 		{"angle brackets and a space in the query", `<a href="?q=<a b>">t</a>`,

@@ -339,13 +339,16 @@ func (r *renderer) link(n *html.Node) {
 	r.text("["+linkText.Replace(content)+"]("+linkDest.Replace(href)+")", true)
 }
 
-// linkText escapes what ends link text or opens another link; linkDest
+// linkText escapes what ends link text or opens another link — a bracket, or
+// a "<" that would start an autolink (<javascript:…> is one) or raw HTML
+// inside the text; a backtick is left alone, since the renderer's own code
+// spans sit inside link text legitimately. linkDest
 // percent-encodes what ends a destination or opens another link (and the
 // space, which a bare destination may not hold). Percent-encoding keeps the
 // URL one a reader can follow as written; <…> around the destination would
 // also do, but not every markdown reader honours it.
 var (
-	linkText = strings.NewReplacer(`\`, `\\`, `[`, `\[`, `]`, `\]`)
+	linkText = strings.NewReplacer(`\`, `\\`, `[`, `\[`, `]`, `\]`, `<`, `\<`)
 	linkDest = strings.NewReplacer(`(`, `%28`, `)`, `%29`, `[`, `%5B`, `]`, `%5D`, `<`, `%3C`, `>`, `%3E`, ` `, `%20`)
 )
 

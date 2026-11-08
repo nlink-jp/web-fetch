@@ -14,7 +14,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   in a path or query, so an href of `?)[x](javascript:alert(1)` — or anchor
   text of `a](javascript:b)[c` — ended the real link early and left a second,
   page-authored link whose target never passed the allow-list. Link text now
-  escapes `\`, `[` and `]`, and the destination percent-encodes `( ) [ ] < >`
+  escapes `\`, `[`, `]` and `<` (an autolink `<javascript:…>` or raw HTML in
+  the text would win over the link), and the destination percent-encodes `( ) [ ] < >`
   and the space; a URL with parentheses in its path reads as
   `…/Go_%28language%29`, which resolves to the same resource. Found by the
   code-audit skill's second run over this repository.
