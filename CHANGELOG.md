@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A `<pre>` of backticks no longer costs the square of its length to
+  render.** The markdown fence around a code block must be longer than any
+  backtick run inside it; the renderer found that length by growing the
+  fence one backtick at a time and searching the whole block again at every
+  step, uncharged by the render budget, so a few KiB of gzip carrying a
+  megabyte of backticks pinned one core for minutes on every page turn. The
+  longest run is now found in one pass, and that pass is charged to the
+  budget like a write. Found by the code-audit skill's second run over this
+  repository.
 - **The Linux archives no longer record the builder's user and group names.**
   macOS `tar` stores each staging file's owner names (`magi:wheel`-style) in
   the archive headers unless told otherwise, so every published `.tar.gz`

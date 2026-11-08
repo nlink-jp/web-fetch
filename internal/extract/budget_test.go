@@ -91,3 +91,36 @@ func TestOrdinaryNestingStaysWithinTheBudget(t *testing.T) {
 		t.Errorf("limits for a 100-byte page have no floor: %d %d", write, text)
 	}
 }
+
+// A <pre> of backticks (code-audit run-2, 2026-11-08): the fence around a
+// block must be longer than its longest backtick run, and finding that
+// length used to cost the square of the block — the fence grew one backtick
+// at a time and the whole block was searched again at every step, uncharged.
+// One pass now, charged to the budget.
+func TestPreOfBackticksRendersInLinearTime(t *testing.T) {
+	const n = 1 << 20
+	ticks := strings.Repeat("`", n)
+	doc := "<html><body><pre>" + ticks + "</pre></body></html>"
+	start := time.Now()
+	res, err := Extract(doc, nil, FormatMarkdown)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("rendering took %s", elapsed)
+	}
+	fence := ticks + "`"
+	if res.Text != fence+"\n"+ticks+"\n"+fence {
+		t.Errorf("fence is not the longest run + 1: %.40q… (%d bytes)", res.Text, len(res.Text))
+	}
+	t.Logf("%d backticks rendered in %s", n, elapsed)
+}
+
+func TestLongestRun(t *testing.T) {
+	for in, want := range map[string]int{"": 0, "abc": 0, "`": 1, "a``b```c``": 3, "````": 4, "x = ```\ny": 3} {
+		if got := longestRun(in, '`'); got != want {
+			t.Errorf("longestRun(%q) = %d, want %d", in, got, want)
+		}
+	}
+}

@@ -206,6 +206,11 @@ this a year from now.
   default `max_bytes` (pre-release review, finding 1). The renderer now uses
   `bytes.Buffer.Truncate` to drop trailing whitespace and reads the last byte
   for line-start checks; `TestRenderingScalesLinearly` pins the ratio.
+- **Never search the block again while growing the fence.** `renderer.pre`
+  used to add one backtick and re-run `strings.Contains` over the whole
+  `<pre>` until the fence was unique: quadratic in a block of backticks and
+  outside the budget (code-audit run-2). One pass finds the longest run, and
+  the pass is charged; `TestPreOfBackticksRendersInLinearTime` pins it.
 - **A `go test … | grep … || true` recipe cannot fail.** `make e2e` now logs
   the Go suite to `dist/e2e-go.log` and exits with its status.
 - **Review findings deliberately not taken** (pre-release review, 2026-09-12):

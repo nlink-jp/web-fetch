@@ -449,11 +449,38 @@ func (r *renderer) pre(n *html.Node) {
 			}
 		}
 	}
-	fence := "```"
-	for strings.Contains(raw, fence) {
-		fence += "`"
+	// The fence must be longer than any backtick run inside the block. One
+	// pass over the content finds the longest run, and that pass is charged
+	// to the budget like a write: a <pre> holding nothing but backticks
+	// costs its length, not its square. (A first draft grew the fence one
+	// backtick at a time and searched the whole block again at every step —
+	// quadratic, uncharged, and 5 MiB of backticks was minutes of one core;
+	// code-audit run-2.)
+	if !r.budget.charge(len(raw)) {
+		return
 	}
+	width := longestRun(raw, '`') + 1
+	if width < 3 {
+		width = 3
+	}
+	fence := strings.Repeat("`", width)
 	r.block(fence + lang + "\n" + raw + "\n" + fence)
+}
+
+// longestRun returns the length of the longest run of c in s, in one pass.
+func longestRun(s string, c byte) int {
+	longest, run := 0, 0
+	for i := 0; i < len(s); i++ {
+		if s[i] != c {
+			run = 0
+			continue
+		}
+		run++
+		if run > longest {
+			longest = run
+		}
+	}
+	return longest
 }
 
 // directRows returns the <tr> elements of one table, through thead / tbody /
