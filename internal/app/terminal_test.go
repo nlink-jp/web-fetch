@@ -33,7 +33,7 @@ func (charDevice) Sys() any           { return nil }
 // hostile is the page: an OSC title write and a screen clear in the title,
 // a C1 CSI, a bidi override and DEL in the text. Hand-written.
 const hostileTitle = "Page\x1b]0;owned\x07\x1b[2J"
-const hostileText = "before \u009b31m red ‮ desrever \x7f after"
+const hostileText = "before \u009b31m red \u202e desrever \x7f after"
 
 func hostileServer(t *testing.T) *httptest.Server {
 	t.Helper()
@@ -66,8 +66,8 @@ func TestIsTerminalIsTheCharacterDeviceBit(t *testing.T) {
 }
 
 func TestInertReplacesWhatATerminalWouldActOn(t *testing.T) {
-	in := "a\tb\nc\x1b[2Jd\x7fe\u0085f\u009bg‮h⁦i‎j\x00k"
-	want := "a\tb\nc�[2Jd�e�f�g�h�i‎j�k"
+	in := "a\tb\nc\x1b[2Jd\x7fe\u0085f\u009bg\u202eh\u2066i\u200ej\x00k"
+	want := "a\tb\nc�[2Jd�e�f�g�h�i\u200ej�k"
 	if got := inert(in); got != want {
 		t.Errorf("inert:\n got %q\nwant %q", got, want)
 	}
@@ -77,7 +77,7 @@ func TestInertReplacesWhatATerminalWouldActOn(t *testing.T) {
 }
 
 func TestInertJSONEscapesWhatTheEncoderLeavesRaw(t *testing.T) {
-	in := []byte("{\"t\":\"a\\u001b\u009b‮\x7f‎日\"}")
+	in := []byte("{\"t\":\"a\\u001b\u009b\u202e\x7f\u200e日\"}")
 	want := `{"t":"a` + esc(0x1b) + esc(0x9b) + esc(0x202e) + esc(0x7f) + "\u200e\u65e5" + `"}`
 	got := inertJSON(in)
 	if string(got) != want {
@@ -103,7 +103,7 @@ func TestPageTextIsInertOnATerminalAndVerbatimOnAPipe(t *testing.T) {
 		t.Fatalf("code=%d stderr=%q", code, errb.String())
 	}
 	out := term.String()
-	for _, bad := range []string{"\x1b", "\u009b", "‮", "\x7f"} {
+	for _, bad := range []string{"\x1b", "\u009b", "\u202e", "\x7f"} {
 		if strings.Contains(out, bad) {
 			t.Errorf("terminal output carries %q: %q", bad, out)
 		}
@@ -127,7 +127,7 @@ func TestPageTextIsInertOnATerminalAndVerbatimOnAPipe(t *testing.T) {
 		t.Fatalf("json: code=%d stderr=%q", code, errb.String())
 	}
 	jout := jterm.String()
-	for _, bad := range []string{"\x1b", "\u009b", "‮", "\x7f"} {
+	for _, bad := range []string{"\x1b", "\u009b", "\u202e", "\x7f"} {
 		if strings.Contains(jout, bad) {
 			t.Errorf("terminal JSON carries %q: %q", bad, jout)
 		}
@@ -149,7 +149,7 @@ func TestPageTextIsInertOnATerminalAndVerbatimOnAPipe(t *testing.T) {
 	if code := run([]string{"--json", srv.URL + "/"}, "v9", strings.NewReader(""), &jpipe, &errb); code != exitOK {
 		t.Fatalf("json pipe: code=%d stderr=%q", code, errb.String())
 	}
-	if !strings.Contains(jpipe.String(), "\u009b") || !strings.Contains(jpipe.String(), "‮") {
+	if !strings.Contains(jpipe.String(), "\u009b") || !strings.Contains(jpipe.String(), "\u202e") {
 		t.Errorf("piped JSON is not verbatim: %q", jpipe.String())
 	}
 }
