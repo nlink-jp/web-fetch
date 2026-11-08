@@ -404,13 +404,20 @@ func FormatBytes(n int64) string {
 // SearchPaths lists where a config file is looked for, in order — the default
 // search path. macOS operators expect ~/.config too, so it is searched before
 // Application Support rather than instead of it.
+//
+// Only absolute values locate it. The XDG Base Directory specification says
+// a relative XDG_CONFIG_HOME is invalid and must be ignored, and a relative
+// home directory is no better: either would resolve against the process's
+// working directory, which for an MCP server is usually the project, so a
+// committed file could pose as the operator's own. The environment that
+// names these directories is still the runtime's to trust (doc.go).
 func SearchPaths() []string {
 	var paths []string
-	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
+	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" && filepath.IsAbs(x) {
 		paths = append(paths, filepath.Join(x, "web-fetch", "config.toml"))
 	}
 	home, err := os.UserHomeDir()
-	if err != nil {
+	if err != nil || !filepath.IsAbs(home) {
 		return paths
 	}
 	paths = append(paths, filepath.Join(home, ".config", "web-fetch", "config.toml"))

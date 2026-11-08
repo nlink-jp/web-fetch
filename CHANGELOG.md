@@ -8,6 +8,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A relative `XDG_CONFIG_HOME` or `HOME` no longer locates the default
+  search path.** The XDG Base Directory specification says a relative value
+  is invalid and must be ignored; web-fetch joined it as given, so it
+  resolved against the working directory — for an MCP server usually the
+  project — where a committed `allow_private = true` file could pose as the
+  operator's own. Both are now required to be absolute. README stated that a
+  project's MCP configuration "can never open the LAN"; it now says what the
+  design record says: the `--config` / `WEB_FETCH_CONFIG` file is refused,
+  and the environment that locates the default search path is the launching
+  runtime's to trust. Found by the code-audit skill's first run over this
+  repository.
 - **Page text printed to a terminal is made inert.** The CLI wrote a page's
   title and text to stdout as fetched, so escape sequences a page carried
   (screen clears, OSC window titles and hyperlinks, clipboard writes where

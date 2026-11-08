@@ -32,7 +32,8 @@ web-fetch mcp                                        # MCP server over stdio: to
   the other reserved ranges are refused — judged on the addresses a name
   actually resolves to, at connection time, on every redirect hop. Cloud
   metadata endpoints are in that set. An operator who wants LAN access sets
-  `allow_private = true` in their own config file; nothing else can.
+  `allow_private = true` in a config file on the default search path; no
+  flag, MCP argument or `--config` file can.
 - **Carry credentials.** No cookies, no `Authorization`, no custom headers, no
   `user:pass@` in URLs (rejected, also in redirect targets). Authenticated pages
   are out of reach by construction.
@@ -87,8 +88,10 @@ built-in default.
 
 `[network] allow_private` is the one key with a rule of its own: it is honoured
 only in a file on that default search path. A file named by `--config` or
-`WEB_FETCH_CONFIG` that sets it is a startup error, so a project's MCP
-configuration can never open the LAN.
+`WEB_FETCH_CONFIG` that sets it is a startup error. The default search path is
+located by `HOME` / `XDG_CONFIG_HOME` as the launching runtime hands them down
+(a relative value is ignored), so a server entry that sets those variables
+chooses that file: approve a project's MCP configuration only if you trust it.
 
 ## MCP server
 

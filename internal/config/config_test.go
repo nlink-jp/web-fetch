@@ -250,6 +250,47 @@ func TestSearchPathsPreferXDGThenHome(t *testing.T) {
 	}
 }
 
+// A relative XDG_CONFIG_HOME is invalid under the XDG Base Directory
+// specification and is ignored; a relative HOME yields no search path at all.
+// Either would otherwise resolve against the working directory, where a
+// project's committed file could pose as the operator's own (code-audit
+// run-1, 2026-11-08).
+func TestRelativeSearchRootsAreIgnored(t *testing.T) {
+	isolate(t)
+	t.Setenv("XDG_CONFIG_HOME", "rel/xdg")
+	for _, p := range SearchPaths() {
+		if !filepath.IsAbs(p) {
+			t.Errorf("relative search path %q", p)
+		}
+		if strings.Contains(p, "rel/xdg") {
+			t.Errorf("relative XDG_CONFIG_HOME was used: %q", p)
+		}
+	}
+	if paths := SearchPaths(); len(paths) < 1 || !strings.Contains(paths[0], filepath.Join(".config", "web-fetch")) {
+		t.Errorf("with a relative XDG_CONFIG_HOME the search starts at ~/.config: %v", paths)
+	}
+
+	// The relative value must not reach a file either: a committed
+	// rel/xdg/web-fetch/config.toml with allow_private = true in the
+	// working directory stays unread.
+	work := t.TempDir()
+	t.Chdir(work)
+	writeFile(t, filepath.Join(work, "rel", "xdg", "web-fetch", "config.toml"), "[network]\nallow_private = true\n")
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Network.AllowPrivate || cfg.Path != "" {
+		t.Errorf("a file under a relative XDG_CONFIG_HOME was honoured: path=%q allow_private=%v", cfg.Path, cfg.Network.AllowPrivate)
+	}
+
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", "relhome")
+	if paths := SearchPaths(); len(paths) != 0 {
+		t.Errorf("a relative HOME yields search paths: %v", paths)
+	}
+}
+
 func TestDefaultUserAgentNamesTheToolAndItsHome(t *testing.T) {
 	ua := DefaultUserAgent("v1.2.3")
 	if !strings.HasPrefix(ua, "web-fetch/v1.2.3") || !strings.Contains(ua, UserAgentHome) {
