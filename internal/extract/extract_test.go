@@ -295,3 +295,69 @@ func TestLinkSchemesAreAllowListedAfterResolution(t *testing.T) {
 		t.Errorf("no page URL, javascript base: %q", res.Text)
 	}
 }
+
+// A page cannot forge a link (code-audit run-2, 2026-11-08). The scheme
+// allow-list judges the parsed href, but the serialised href keeps ( ) [ ]
+// in its query and path, and the anchor text is the page's own words: either
+// could end the destination or the text early and open a second link whose
+// target never passed linkScheme. Text and destination are escaped so every
+// link in the output is one the renderer made.
+func TestLinkTextAndDestinationCannotEndTheLink(t *testing.T) {
+	cases := []struct{ name, html, want string }{
+		{"query that closes the destination", `<a href="?)[x](javascript:alert(1)">t</a>`,
+			"[t](https://site.example/p?%29%5Bx%5D%28javascript:alert%281%29)"},
+		{"path with parentheses", `<a href="/wiki/Go_(language)">Go</a>`,
+			"[Go](https://site.example/wiki/Go_%28language%29)"},
+		{"text that closes the link", `<a href="/q">a](javascript:b)[c</a>`,
+			`[a\](javascript:b)\[c](https://site.example/q)`},
+		{"text ending in a backslash", `<a href="/q">a\</a>`, `[a\\](https://site.example/q)`},
+		{"empty text falls back to the href, escaped as text", `<a href="/p(1)"></a>`,
+			"[https://site.example/p(1)](https://site.example/p%281%29)"},
+		{"angle brackets and a space in the query", `<a href="?q=<a b>">t</a>`,
+			"[t](https://site.example/p?q=%3Ca%20b%3E)"},
+		{"an ordinary link is unchanged", `<a href="a?b=1&c=2#frag">a link</a>`,
+			"[a link](https://site.example/a?b=1&c=2#frag)"},
+	}
+	for _, c := range cases {
+		res, err := Extract("<body><p>"+c.html+"</p></body>", page(t, "https://site.example/p"), FormatMarkdown)
+		if err != nil {
+			t.Errorf("%s: %v", c.name, err)
+			continue
+		}
+		if res.Text != c.want {
+			t.Errorf("%s: got  %q\n%*s want %q", c.name, res.Text, len(c.name)+1, "", c.want)
+		}
+		// Whatever the page wrote, every destination in the output is one
+		// the renderer resolved and allowed.
+		for _, dest := range destinations(res.Text) {
+			if !strings.HasPrefix(dest, "https://site.example/") {
+				t.Errorf("%s: a destination the renderer did not make: %q in %q", c.name, dest, res.Text)
+			}
+		}
+	}
+	// The text format writes the words as they are: there is no link syntax to forge.
+	res, _ := Extract(`<body><p><a href="?)[x](javascript:alert(1)">t</a></p></body>`, page(t, "https://site.example/p"), FormatText)
+	if res.Text != "t" {
+		t.Errorf("text format: %q", res.Text)
+	}
+}
+
+// destinations returns what follows each unescaped "](" in markdown — the
+// start of every link destination a CommonMark reader would see. A "]"
+// behind an odd number of backslashes is text.
+func destinations(md string) []string {
+	var out []string
+	for i := 0; i+1 < len(md); i++ {
+		if md[i] != ']' || md[i+1] != '(' {
+			continue
+		}
+		slashes := 0
+		for j := i - 1; j >= 0 && md[j] == '\\'; j-- {
+			slashes++
+		}
+		if slashes%2 == 0 {
+			out = append(out, md[i+2:])
+		}
+	}
+	return out
+}

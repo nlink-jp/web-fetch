@@ -316,6 +316,13 @@ func (r *renderer) wrap(n *html.Node, marker string) {
 // link renders <a>: markdown [text](absolute URL), plain text otherwise. A
 // target outside the schemes a reader can follow (see resolve), or an
 // unparsable href, leaves the text alone.
+//
+// In markdown the text and the destination are escaped, so neither can end
+// the link early: a page's own "](javascript:…" in an href's query or path
+// (net/url keeps ( ) [ ] as written there) or in the anchor text would
+// otherwise read as a second link whose target never passed linkScheme
+// (code-audit run-2). Every link a reader of the output sees is one the
+// renderer made.
 func (r *renderer) link(n *html.Node) {
 	content := r.inline(n)
 	href := r.resolve(attr(n, "href"))
@@ -329,8 +336,18 @@ func (r *renderer) link(n *html.Node) {
 		r.text(content, true)
 		return
 	}
-	r.text("["+content+"]("+href+")", true)
+	r.text("["+linkText.Replace(content)+"]("+linkDest.Replace(href)+")", true)
 }
+
+// linkText escapes what ends link text or opens another link; linkDest
+// percent-encodes what ends a destination or opens another link (and the
+// space, which a bare destination may not hold). Percent-encoding keeps the
+// URL one a reader can follow as written; <…> around the destination would
+// also do, but not every markdown reader honours it.
+var (
+	linkText = strings.NewReplacer(`\`, `\\`, `[`, `\[`, `]`, `\]`)
+	linkDest = strings.NewReplacer(`(`, `%28`, `)`, `%29`, `[`, `%5B`, `]`, `%5D`, `<`, `%3C`, `>`, `%3E`, ` `, `%20`)
+)
 
 // resolve absolutises href against the base; "" when unusable. The scheme
 // is judged after resolution, against the closed set of schemes a link may

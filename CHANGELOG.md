@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A page can no longer forge a markdown link past the scheme allow-list.**
+  The renderer judged an href's scheme on the parsed URL but wrote the link
+  as `[text](url)` by concatenation, and net/url keeps `( ) [ ]` as written
+  in a path or query, so an href of `?)[x](javascript:alert(1)` — or anchor
+  text of `a](javascript:b)[c` — ended the real link early and left a second,
+  page-authored link whose target never passed the allow-list. Link text now
+  escapes `\`, `[` and `]`, and the destination percent-encodes `( ) [ ] < >`
+  and the space; a URL with parentheses in its path reads as
+  `…/Go_%28language%29`, which resolves to the same resource. Found by the
+  code-audit skill's second run over this repository.
 - **The config file is read strictly.** The reader searched and sliced each
   line, so text after a value or a `[section]` header was dropped (`[network]
   allow_private = true` on one line read as an empty section), a repeated

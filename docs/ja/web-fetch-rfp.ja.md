@@ -598,7 +598,10 @@ Reason: 汎用のデータ取得プリミティブで、特定サービスの認
 - `http://go.dev/` → `https://go.dev/` の 1 ホップが `redirects` に記録される。
 - 抽出の実装で決めた細部（RFP に無かったもの）: リンクにするのは解決後に http / https /
   mailto になる href だけ（`javascript:`・`data:`・その他の scheme はテキストのみ。判定を
-  解決後に行うので `<base href>` が `#frag` の href に自分の scheme を渡せない）; `<meta charset="utf-16">` は UTF-8 として扱う（WHATWG）; `<body>` に
+  解決後に行うので `<base href>` が `#frag` の href に自分の scheme を渡せない）。リンクの
+  テキストと宛先はエスケープする（テキストの `[` `]` は `\[` `\]`、宛先の `( ) [ ] < >` と
+  空白はパーセント符号化）ので、ページがリンクを途中で閉じて自前の 2 本目を書くことは
+  できない; `<meta charset="utf-16">` は UTF-8 として扱う（WHATWG）; `<body>` に
   達した時点で meta の先読みを止める; `://` を含む引数はすべて fetch として扱い、`ftp://x` は
   「unknown command」ではなく `scheme_not_allowed` で答える; 3 行以上の連続改行は 2 行（空行
   1 つ）に畳む。

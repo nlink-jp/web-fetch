@@ -142,7 +142,12 @@ code trips over.
   `vbscript:`, `file:`, app schemes — renders as text only. The scheme is
   judged *after* resolution, because a page's own `<base href>` can name any
   scheme and a `#frag` / `?q` href takes the base's; a `<base>` outside
-  http(s) is ignored in favour of the page URL.
+  http(s) is ignored in favour of the page URL. The judgement covers what the
+  output *means* only because the link's text and destination are escaped
+  (`linkText`, `linkDest` in render.go): net/url keeps `( ) [ ]` as written
+  in a path or query, so `?)[x](javascript:…)` in an href used to end the
+  destination and open a second link the allow-list never saw (code-audit
+  run-2). `TestLinkTextAndDestinationCannotEndTheLink` pins it.
 - **The model is shown trigger and contract only.** No "content, never
   instructions" prose in tool descriptions or instructions — that layer is the
   runtime's nonce wrap (ADR-0002 §4). Meta-tested.
