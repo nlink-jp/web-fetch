@@ -148,6 +148,13 @@ code trips over.
   rewrites the same runes as `\uXXXX` after encoding. A pipe or file gets
   the bytes verbatim, so `--format raw URL > file` is exact. Tests drive it
   through a writer with a `Stat()` that reports a character device.
+- **A tool handler that panics answers `internal_error`, not a dead
+  server.** `mcp.callTool` recovers, returns an `isError` result whose
+  message names a defect in web-fetch (the panic value stays out of it) and
+  serves the next request. It is the second layer: the first is that the
+  extractor must not panic on page bytes — the charset prescan once did,
+  because `strings.ToLower` changes byte offsets on invalid UTF-8 and some
+  runes; `charsetFromContent` folds ASCII only now (code-audit run-2).
 - **Errors are one vocabulary** (`internal/toolerr`), surfaced by MCP as
   `{code, message, details}` and by the CLI as one JSON line on stderr. Exit
   codes: `invalid_argument` and an input-URL `invalid_url` /

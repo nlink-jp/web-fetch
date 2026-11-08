@@ -95,6 +95,7 @@ A tool failure is a result (`isError: true`) whose text is one JSON object:
 | `too_large` | the decoded body passed the byte cap (`details.max_bytes`), or its rendering passed the render budget (`details.render_limit`: nested blocks multiplied the text far past what was fetched) | nothing is truncated: the page is larger than this server reads. Only an operator can raise `max_bytes`; a page refused for its rendering is not readable here in `markdown` or `text` — `format: raw` returns its bytes as fetched |
 | `unsupported_content_type` | PDF, image, binary or an unknown media type (`details.content_type`), or a non-gzip `Content-Encoding` (`details.content_encoding`) | this server extracts HTML, text and JSON only |
 | `charset_unsupported` | the page declares a charset the decoder table does not know (`details.charset`) | try `format: raw` only if the bytes might be ASCII; otherwise the page is not readable here |
+| `internal_error` | the tool failed on this page's bytes — a defect in web-fetch, not in the call; the server is still running | do not retry the same URL; it is not readable here. Other URLs are unaffected |
 
 ## Reach
 

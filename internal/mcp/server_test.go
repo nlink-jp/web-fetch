@@ -238,3 +238,42 @@ func TestServeWithoutStdinIsAnError(t *testing.T) {
 		t.Error("nil stdin must be refused, not hang")
 	}
 }
+
+// A handler that panics must not end the server (code-audit run-2,
+// 2026-11-08: a page-authored <meta> attribute panicked the extractor and
+// the stdio process with it). The panic is a tool error, and the next
+// request is served.
+func TestHandlerPanicIsAToolErrorAndTheServerGoesOn(t *testing.T) {
+	bomb := Tool{
+		Name: "bomb", Description: "Panics, for the recover test.",
+		InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+		Annotations: map[string]any{"readOnlyHint": true, "openWorldHint": false},
+		Handle: func(context.Context, json.RawMessage) (any, error) {
+			var s []byte
+			_ = s[23:] // slice bounds out of range, as the extractor did
+			return nil, nil
+		},
+	}
+	s := New("test", bomb, echoTool(nil))
+	rs := converse(t, s,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"bomb","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"url":"x"}}}`,
+	)
+	if len(rs) != 2 {
+		t.Fatalf("want 2 replies, got %d: %v", len(rs), rs)
+	}
+	r := result(t, rs[0])
+	if r["isError"] != true {
+		t.Errorf("a panic must be a tool error: %v", r)
+	}
+	var e map[string]any
+	if err := json.Unmarshal([]byte(contentText(t, r)), &e); err != nil || e["code"] != CodeInternalError {
+		t.Errorf("code: %v %v", e, err)
+	}
+	if msg, _ := e["message"].(string); strings.Contains(msg, "out of range") || strings.Contains(msg, "runtime error") {
+		t.Errorf("the panic value must not reach the model: %q", msg)
+	}
+	if contentText(t, result(t, rs[1])) == "" || result(t, rs[1])["isError"] == true {
+		t.Errorf("the request after the panic was not served: %v", rs[1])
+	}
+}

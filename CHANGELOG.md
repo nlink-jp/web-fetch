@@ -8,6 +8,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A page's `<meta http-equiv="content-type">` can no longer end the MCP
+  server.** The charset prescan lower-cased the attribute with
+  `strings.ToLower` and applied the index it found to the original string;
+  the attribute is the page's undecoded bytes, and ToLower rewrites each
+  invalid byte as three (U+FFFD) and shortens some runes, so a handful of
+  `0xFF` bytes before `charset=` put the index past the end and the process
+  panicked — the stdio server with it, until the runtime restarted it. The
+  search now folds ASCII case only, at offsets of the string it slices. As a
+  second layer, a tool handler that panics answers `internal_error` (an
+  `isError` result; the next request is served) instead of ending the
+  server; the panic value is not shown to the model. Found by the code-audit
+  skill's second run over this repository.
 - **A `<pre>` of backticks no longer costs the square of its length to
   render.** The markdown fence around a code block must be longer than any
   backtick run inside it; the renderer found that length by growing the

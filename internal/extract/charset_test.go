@@ -153,10 +153,48 @@ func TestCharsetFromContent(t *testing.T) {
 		`text/html; charset=Shift_JIS`:     "Shift_JIS",
 		`text/html; charset="euc-jp"; x=y`: "euc-jp",
 		`text/html;charset=utf-8`:          "utf-8",
+		`text/html; CHARSET=Shift_JIS`:     "Shift_JIS",
 		`text/html`:                        "",
+		// The attribute is the page's undecoded bytes. Invalid UTF-8 before
+		// the needle used to panic (strings.ToLower rewrote each byte as
+		// three), and runes whose lower case is shorter — KELVIN SIGN
+		// (U+212A, 3 bytes) lowers to k (1 byte) — cut the label in the
+		// wrong place. Code-audit run-2, 2026-11-08.
+		"\xff\xff\xff\xff\xffcharset=utf-8":                       "utf-8",
+		"\u212a\u212a\u212a\u212a charset=euc-jp":                 "euc-jp",
+		"\u0130\u0130\u0130\u0130\u0130\u0130; charset=shift_jis": "shift_jis",
+		"\xff\xff\xff\xff\xffcharset":                             "",
+		"\xffCHARSET=\xff":                                        "\xff",
 	} {
 		if got := charsetFromContent(in); got != want {
 			t.Errorf("charsetFromContent(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// The same bytes through Decode: the <meta http-equiv> prescan on a body with
+// no BOM and no header charset is where a page reaches charsetFromContent.
+func TestMetaContentWithInvalidBytesDoesNotPanic(t *testing.T) {
+	body := "<html><head><meta http-equiv=\"content-type\" content=\"\xff\xff\xff\xff\xffcharset=utf-8\"></head><body>hi</body></html>"
+	d, err := Decode([]byte(body), "text/html", true)
+	if err != nil || d.Charset != "utf-8" || d.Source != SourceMeta {
+		t.Errorf("got %v %+v", err, d)
+	}
+	if !strings.Contains(d.Text, "hi") {
+		t.Errorf("text lost: %q", d.Text)
+	}
+}
+
+func TestIndexASCIIFold(t *testing.T) {
+	for _, c := range []struct {
+		s, needle string
+		want      int
+	}{
+		{"", "x", -1}, {"x", "", 0}, {"abc", "B", -1}, {"aBc", "b", 1}, {"aBc", "bc", 1},
+		{"ABCDEF", "cde", 2}, {"a\xffB", "\xffb", 1}, {"charsetcharset=", "charset=", 7},
+	} {
+		if got := indexASCIIFold(c.s, c.needle); got != c.want {
+			t.Errorf("indexASCIIFold(%q, %q) = %d, want %d", c.s, c.needle, got, c.want)
 		}
 	}
 }

@@ -36,7 +36,7 @@ func TestUsageDocumentsEveryArgument(t *testing.T) {
 
 func TestUsageDocumentsEveryErrorCode(t *testing.T) {
 	doc := UsageDoc()
-	for _, c := range append([]string{CodeInvalidArgument}, toolCodes()...) {
+	for _, c := range append([]string{CodeInvalidArgument, CodeInternalError}, toolCodes()...) {
 		if !strings.Contains(doc, "`"+c+"`") {
 			t.Errorf("usage.md has no recovery guidance for the error code %q", c)
 		}

@@ -196,7 +196,18 @@ type callParams struct {
 	Arguments json.RawMessage `json:"arguments"`
 }
 
-func (s *Server) callTool(ctx context.Context, req *request) response {
+func (s *Server) callTool(ctx context.Context, req *request) (resp response) {
+	// A handler that panics must not end the server: it is a long-lived
+	// process whose input is whatever page the model asked for, and a page
+	// that found a bug in the extractor would otherwise take the fetch tool
+	// away until the runtime restarts it (code-audit run-2). The panic
+	// becomes a tool error the model can see; the request after it is
+	// served as usual.
+	defer func() {
+		if r := recover(); r != nil {
+			resp = okResponse(req.ID, toolError(&internalError{cause: fmt.Sprint(r)}))
+		}
+	}()
 	var p callParams
 	if len(req.Params) > 0 {
 		if err := json.Unmarshal(req.Params, &p); err != nil {
@@ -292,6 +303,21 @@ var (
 // unknown or mistyped argument. Every other code comes from the packages
 // behind the tools, so an agent sees one vocabulary end to end.
 const CodeInvalidArgument = "invalid_argument"
+
+// CodeInternalError is this layer's code for a tool handler that panicked:
+// a defect in the server, not in the call. The message says so; the cause
+// is not shown, because it is the panic value of code that was given the
+// page's bytes, and a line of a stack is of no use to a model.
+const CodeInternalError = "internal_error"
+
+// internalError is the error a recovered handler panic surfaces as.
+type internalError struct{ cause string }
+
+func (e *internalError) Error() string {
+	return "the tool failed on this input (a defect in web-fetch, not in the call); the server is still running"
+}
+func (e *internalError) ErrorCode() string            { return CodeInternalError }
+func (e *internalError) ErrorDetails() map[string]any { return nil }
 
 // ArgError is an argument-validation failure. Argument, when known, names the
 // offending argument and surfaces as details.argument.

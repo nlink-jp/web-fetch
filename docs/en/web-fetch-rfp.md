@@ -228,6 +228,7 @@ prints the same JSON on stderr):
 | `too_large` | over `max_bytes` after decoding | `max_bytes` | 1 |
 | `unsupported_content_type` | a refused row of the table above, or a non-gzip `Content-Encoding` | `content_type`, `content_encoding` | 1 |
 | `charset_unsupported` | a declared label absent from the conversion table | `charset` | 1 |
+| `internal_error` | the tool handler panicked on the page's bytes — a defect in web-fetch, recovered so the server goes on (MCP only; the CLI ends with Go's own panic exit) | — | — |
 
 **Exit codes** (CLI): 0 = fetched (even if cut), 1 = fetch failed, 2 = usage or
 configuration error. `invalid_argument` and an `invalid_url` /

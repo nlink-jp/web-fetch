@@ -169,10 +169,13 @@ func prescan(body []byte) string {
 }
 
 // charsetFromContent pulls the charset out of a content="text/html;
-// charset=..." attribute value.
+// charset=..." attribute value. The attribute is the page's own bytes,
+// undecoded, so the case-insensitive search folds ASCII only: strings.ToLower
+// rewrites an invalid byte as U+FFFD (three bytes) and shortens some runes,
+// so an index found in the lowered copy does not hold in the original — a
+// page could put it past the end and panic the process (code-audit run-2).
 func charsetFromContent(content string) string {
-	lower := strings.ToLower(content)
-	i := strings.Index(lower, "charset=")
+	i := indexASCIIFold(content, "charset=")
 	if i < 0 {
 		return ""
 	}
@@ -182,4 +185,27 @@ func charsetFromContent(content string) string {
 		rest = rest[:j]
 	}
 	return strings.TrimSpace(rest)
+}
+
+// indexASCIIFold returns the byte offset of the first match of needle in s,
+// comparing ASCII letters without regard to case and every other byte as is,
+// or -1. needle must be lower-case ASCII. Offsets are into s itself.
+func indexASCIIFold(s, needle string) int {
+	for i := 0; i+len(needle) <= len(s); i++ {
+		ok := true
+		for k := 0; k < len(needle); k++ {
+			c := s[i+k]
+			if 'A' <= c && c <= 'Z' {
+				c += 'a' - 'A'
+			}
+			if c != needle[k] {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return i
+		}
+	}
+	return -1
 }

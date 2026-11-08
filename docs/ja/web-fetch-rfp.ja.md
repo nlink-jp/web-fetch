@@ -210,6 +210,7 @@ UTF-8 妥当性 → 既定 windows-1252。結果は `charset` / `charset_source`
 | `too_large` | 復号後 `max_bytes` 超過 | `max_bytes` | 1 |
 | `unsupported_content_type` | 上表の拒否行、または gzip 以外の `Content-Encoding` | `content_type`, `content_encoding` | 1 |
 | `charset_unsupported` | 宣言ラベルが変換表に無い | `charset` | 1 |
+| `internal_error` | ツールハンドラがページのバイト列で panic した — web-fetch 側の欠陥。回復してサーバは継続する（MCP のみ。CLI は Go 自身の panic 終了） | — | — |
 
 **終了コード**（CLI）: 0 = 取得完了（切れていても 0）、1 = 取得失敗、2 = 使い方・設定の
 誤り。`invalid_argument` と、入力 URL 自体の `invalid_url` / `scheme_not_allowed` が 2、
