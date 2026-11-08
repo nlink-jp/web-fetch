@@ -238,6 +238,16 @@ func TestKindsAndUnsupportedTypes(t *testing.T) {
 			t.Errorf("%s: %v (%v)", path, err, toolerr.Detail(err, "content_type"))
 		}
 	}
+	// The remote header is quoted in the message (it is the site's text);
+	// a sniffed type says so outside the quotes.
+	_, err := c.Fetch(context.Background(), r.url("/pdf"))
+	if msg := err.Error(); !strings.Contains(msg, ` is "application/pdf", which`) {
+		t.Errorf("declared type not quoted: %s", msg)
+	}
+	_, err = c.Fetch(context.Background(), r.url("/binary"))
+	if msg := err.Error(); !strings.Contains(msg, `declares no media type and sniffs as "application/octet-stream", which`) {
+		t.Errorf("sniffed type: %s", msg)
+	}
 	for mt, want := range map[string]Kind{"text/html": KindHTML, "application/xhtml+xml": KindHTML, "text/csv": KindText, "application/ld+json": KindText, "application/rss+xml": KindText, "image/png": 0, "application/octet-stream": 0} {
 		got, _ := classify(mt)
 		if got != want {

@@ -81,6 +81,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Internal
 
+- The `unsupported_content_type` message quotes the declared `Content-Type`
+  (`… is "application/pdf", which web-fetch does not extract`), as the
+  `Content-Encoding` and charset labels already were: the header is the
+  remote site's text, and the quote marks say so inside a sentence in
+  web-fetch's voice. A body with no declared type says `declares no media
+  type and sniffs as "…"`. `details.content_type` is unchanged. Raised by the
+  code-audit skill's first run over this repository as a point to validate;
+  the runtime's nonce wrap covers error results too (lagent wraps every tool
+  result), so this is hardening, not a fix.
 - `make verify-release` also judges each Linux archive: no AppleDouble or other
   macOS metadata members — listed with `--options 'tar:!mac-ext'`, because a
   plain macOS listing folds `._` members away — no extended attributes as pax

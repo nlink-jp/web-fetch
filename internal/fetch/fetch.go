@@ -152,12 +152,15 @@ func (c *Client) Fetch(ctx context.Context, rawURL string) (*Response, error) {
 	out.MediaType = mediaType(out.ContentType, body)
 	kind, ok := classify(out.MediaType)
 	if !ok {
-		declared := out.ContentType
-		if declared == "" {
-			declared = out.MediaType + " (sniffed)"
+		// The header is the remote site's text; quoted, like the
+		// Content-Encoding and charset labels, so the message says whose
+		// words they are.
+		if out.ContentType == "" {
+			return nil, toolerr.Newf(toolerr.CodeUnsupportedContentType, "%s declares no media type and sniffs as %q, which web-fetch does not extract", out.FinalURL, out.MediaType).
+				With("content_type", out.MediaType+" (sniffed)")
 		}
-		return nil, toolerr.Newf(toolerr.CodeUnsupportedContentType, "%s is %s, which web-fetch does not extract", out.FinalURL, declared).
-			With("content_type", declared)
+		return nil, toolerr.Newf(toolerr.CodeUnsupportedContentType, "%s is %q, which web-fetch does not extract", out.FinalURL, out.ContentType).
+			With("content_type", out.ContentType)
 	}
 	out.Kind = kind
 	return out, nil
