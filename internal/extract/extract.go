@@ -115,7 +115,10 @@ func titleOf(doc, root *html.Node) string {
 	return ""
 }
 
-// baseURL is <base href> resolved against the page URL, else the page URL.
+// baseURL is <base href> resolved against the page URL, else the page URL. A
+// base that resolves to anything but http(s) — a page's own javascript: or
+// data: base would hand its scheme to every fragment- or query-only href —
+// is ignored in favour of the page URL.
 func baseURL(doc *html.Node, page *url.URL) *url.URL {
 	b := findFirst(doc, func(n *html.Node) bool { return n.DataAtom == atom.Base })
 	if b == nil {
@@ -130,7 +133,10 @@ func baseURL(doc *html.Node, page *url.URL) *url.URL {
 		return page
 	}
 	if page != nil {
-		return page.ResolveReference(u)
+		u = page.ResolveReference(u)
+	}
+	if s := strings.ToLower(u.Scheme); s != "http" && s != "https" {
+		return page
 	}
 	return u
 }

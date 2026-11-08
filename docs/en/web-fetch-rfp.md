@@ -669,7 +669,9 @@ as brave-search. lagent (lab-series) is a consumer, not the home.
   one-shot.
 - `http://go.dev/` → `https://go.dev/`, one hop, recorded in `redirects`.
 - Extraction details settled in the implementation (absent from the RFP):
-  `javascript:` and `data:` hrefs render as text only; `<meta
+  only an href that resolves to http, https or mailto becomes a link (a
+  `javascript:`, `data:` or other scheme renders as text only, judged after
+  resolution so a `<base href>` cannot hand its scheme to a `#frag` href); `<meta
   charset="utf-16">` means UTF-8 (WHATWG); the meta prescan stops at `<body>`;
   any argument containing `://` is dispatched as a fetch, so `ftp://x` gets
   `scheme_not_allowed` rather than "unknown command"; runs of three or more

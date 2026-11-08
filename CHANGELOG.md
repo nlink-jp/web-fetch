@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A page's `<base href="javascript:…">` can no longer put a `javascript:`
+  URL into a markdown link.** The renderer judged an href's scheme before
+  resolving it against the base, so a fragment- or query-only href (`#top`,
+  `?q`) had no scheme to refuse and took the base's. The scheme is now judged
+  after resolution, against an allow-list (http, https, mailto, or none when
+  there is no base) instead of a deny-list of two, so `vbscript:`, `file:` and
+  app schemes render as text as well; a `<base>` outside http(s) is ignored in
+  favour of the page URL. Found by the code-audit skill's first run over this
+  repository.
 - **A page's nested blocks can no longer render to many times its size.**
   Markdown rendering gives every line one prefix per enclosing blockquote or
   list item, so hundreds of nested levels around many short lines — within

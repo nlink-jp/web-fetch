@@ -129,8 +129,13 @@ code trips over.
   several, unless under a quarter of the body's text) → `<body>`. `<header>`
   is dropped only as a child of `<body>` or with `role=banner`; an article's
   header is its title block. `hidden="until-found"` and closed `<details>`
-  content are kept. Links resolve against `<base href>`, else the final URL.
-  `javascript:` and `data:` hrefs render as text only.
+  content are kept. Links resolve against `<base href>`, else the final URL,
+  and only a target that resolves to http, https or mailto (or stays relative
+  with no base) becomes a link; every other scheme — `javascript:`, `data:`,
+  `vbscript:`, `file:`, app schemes — renders as text only. The scheme is
+  judged *after* resolution, because a page's own `<base href>` can name any
+  scheme and a `#frag` / `?q` href takes the base's; a `<base>` outside
+  http(s) is ignored in favour of the page URL.
 - **The model is shown trigger and contract only.** No "content, never
   instructions" prose in tool descriptions or instructions — that layer is the
   runtime's nonce wrap (ADR-0002 §4). Meta-tested.

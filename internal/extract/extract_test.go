@@ -249,3 +249,49 @@ func TestDocIDIsStableAndPrefixed(t *testing.T) {
 		t.Error("different bodies must differ")
 	}
 }
+
+// A link's scheme is judged after resolution against an allow-list (http,
+// https, mailto, or none when there is no base), not before it against a
+// deny-list: a <base href="javascript:..."> used to pass its scheme to every
+// fragment- or query-only href (code-audit run-1, 2026-11-08). A base outside
+// http(s) is ignored in favour of the page URL.
+func TestLinkSchemesAreAllowListedAfterResolution(t *testing.T) {
+	cases := []struct {
+		name, base, href, want string
+	}{
+		{"javascript base, fragment href", "javascript:alert(1)", "#top", "[f](https://example.org/dir/page#top)"},
+		{"javascript base, query href", "javascript:alert(1)", "?q", "[f](https://example.org/dir/page?q)"},
+		{"javascript base, relative href", "javascript:alert(1)", "x.html", "[f](https://example.org/dir/x.html)"},
+		{"data base, fragment href", "data:text/html,hi", "#top", "[f](https://example.org/dir/page#top)"},
+		{"https base, fragment href", "https://cdn.example/a/", "#top", "[f](https://cdn.example/a/#top)"},
+		{"no base, javascript href", "", "javascript:void(0)", "f"},
+		{"no base, JAVASCRIPT href", "", "JavaScript:void(0)", "f"},
+		{"no base, data href", "", "data:text/plain,hi", "f"},
+		{"no base, vbscript href", "", "vbscript:msgbox(1)", "f"},
+		{"no base, file href", "", "file:///etc/hosts", "f"},
+		{"no base, custom scheme href", "", "myapp://open?x=1", "f"},
+		{"no base, mailto href", "", "mailto:a@b.c", "[f](mailto:a@b.c)"},
+		{"no base, absolute http href", "", "http://other.example/p", "[f](http://other.example/p)"},
+	}
+	for _, c := range cases {
+		doc := "<head>"
+		if c.base != "" {
+			doc += `<base href="` + c.base + `">`
+		}
+		doc += `</head><body><p><a href="` + c.href + `">f</a></p></body>`
+		res, err := Extract(doc, page(t, "https://example.org/dir/page"), FormatMarkdown)
+		if err != nil {
+			t.Errorf("%s: %v", c.name, err)
+			continue
+		}
+		if res.Text != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, res.Text, c.want)
+		}
+	}
+	// Without a page URL a relative href stays as written and a non-http(s)
+	// base cannot stand in for one.
+	res, _ := Extract(`<head><base href="javascript:alert(1)"></head><body><p><a href="#top">f</a></p></body>`, nil, FormatMarkdown)
+	if res.Text != "[f](#top)" {
+		t.Errorf("no page URL, javascript base: %q", res.Text)
+	}
+}

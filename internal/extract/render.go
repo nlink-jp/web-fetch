@@ -314,7 +314,8 @@ func (r *renderer) wrap(n *html.Node, marker string) {
 }
 
 // link renders <a>: markdown [text](absolute URL), plain text otherwise. A
-// javascript: target or an unparsable href leaves the text alone.
+// target outside the schemes a reader can follow (see resolve), or an
+// unparsable href, leaves the text alone.
 func (r *renderer) link(n *html.Node) {
 	content := r.inline(n)
 	href := r.resolve(attr(n, "href"))
@@ -331,7 +332,11 @@ func (r *renderer) link(n *html.Node) {
 	r.text("["+content+"]("+href+")", true)
 }
 
-// resolve absolutises href against the base; "" when unusable.
+// resolve absolutises href against the base; "" when unusable. The scheme
+// is judged after resolution, against the closed set of schemes a link may
+// carry: judged before it, a reference with no scheme of its own ("#top",
+// "?q") took the base's, and a page's own <base href> can name any scheme.
+// A relative href with no base at all stays as written (scheme "").
 func (r *renderer) resolve(href string) string {
 	href = strings.TrimSpace(href)
 	if href == "" {
@@ -341,13 +346,24 @@ func (r *renderer) resolve(href string) string {
 	if err != nil {
 		return ""
 	}
-	if strings.EqualFold(u.Scheme, "javascript") || strings.EqualFold(u.Scheme, "data") {
-		return ""
-	}
 	if r.base != nil {
 		u = r.base.ResolveReference(u)
 	}
+	if !linkScheme(u.Scheme) {
+		return ""
+	}
 	return u.String()
+}
+
+// linkScheme is the allow-list of schemes a rendered link may carry. Anything
+// else — javascript:, data:, vbscript:, file:, custom app schemes — renders as
+// text only.
+func linkScheme(scheme string) bool {
+	switch strings.ToLower(scheme) {
+	case "", "http", "https", "mailto":
+		return true
+	}
+	return false
 }
 
 // maxListStart bounds the <ol start> values honoured: nine digits and a sign.
