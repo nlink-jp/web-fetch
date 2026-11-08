@@ -62,7 +62,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   budget like a write. Found by the code-audit skill's second run over this
   repository.
 - **The Linux archives no longer record the builder's user and group names.**
-  macOS `tar` stores each staging file's owner names (`magi:wheel`-style) in
+  macOS `tar` stores each staging file's owner names (as `user:group`) in
   the archive headers unless told otherwise, so every published `.tar.gz`
   carried the release machine's login. `make package` now passes `--uid 0
   --gid 0 --uname root --gname root`, and `make verify-release` fails any
@@ -134,6 +134,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Internal
 
+- The release-notes entry for the Linux archive owner fix gives the leaked
+  owner fields as a neutral `user:group`, not as the values read from the
+  archive: the next release's notes would otherwise have published the very
+  login the fix withholds. Found by the code-audit skill's second run over
+  this repository.
 - The `unsupported_content_type` message quotes the declared `Content-Type`
   (`… is "application/pdf", which web-fetch does not extract`), as the
   `Content-Encoding` and charset labels already were: the header is the
