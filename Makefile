@@ -1,6 +1,10 @@
 BINARY  := web-fetch
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -ldflags "-X main.version=$(VERSION)"
+# -trimpath: a binary records its source file names; without it they are the
+# absolute paths of this checkout and the module cache, i.e. the builder's
+# home directory and login, in every published asset. verify-release checks.
+GOBUILD := go build -trimpath $(LDFLAGS)
 
 # macOS Developer ID signing / notarization (see nlink-jp/.github
 # CONVENTIONS.md §Code Signing). Defaults match any Developer ID
@@ -22,7 +26,7 @@ PLATFORMS := \
 ## build: Build for the current platform
 build:
 	@mkdir -p dist
-	go build $(LDFLAGS) -o dist/$(BINARY) .
+	$(GOBUILD) -o dist/$(BINARY) .
 	@scripts/codesign-darwin.sh dist/$(BINARY) "$(CODESIGN_IDENTITY)"
 
 ## build-all: Cross-compile for all target platforms
@@ -30,7 +34,7 @@ build-all:
 	@mkdir -p dist
 	@for p in $(PLATFORMS); do os=$${p%/*}; arch=$${p#*/}; \
 		ext=""; [ "$$os" = windows ] && ext=".exe"; \
-		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build $(LDFLAGS) -o dist/$(BINARY)-$$os-$$arch$$ext . ; \
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GOBUILD) -o dist/$(BINARY)-$$os-$$arch$$ext . ; \
 	done
 	@scripts/codesign-darwin.sh dist/$(BINARY)-darwin-arm64 "$(CODESIGN_IDENTITY)" "$(BINARY)"
 
@@ -73,9 +77,10 @@ package: build-all
 	@scripts/notarize-darwin.sh dist/$(BINARY)-$(VERSION)-darwin-arm64.zip "$(NOTARY_PROFILE)"
 
 ## verify-release: refuse to release a zip that is un-notarized, stale, does
-## not unpack, does not run, or holds a build from another tag, and a linux
-## archive that carries macOS metadata or anything but its canonical files.
-## Every step fails closed; only the spctl line is informational.
+## not unpack, does not run, or holds a build from another tag, a binary that
+## embeds the builder's home directory (a build without -trimpath), and a
+## linux archive that carries macOS metadata or anything but its canonical
+## files. Every step fails closed; only the spctl line is informational.
 verify-release:
 	@test -f "dist/$(BINARY)-$(VERSION)-darwin-arm64.zip.notarized" || { \
 		echo "verify-release: FAIL — $(BINARY)-$(VERSION)-darwin-arm64.zip has no notarization marker."; \
@@ -93,6 +98,9 @@ verify-release:
 		elif ! printf '%s\n' "$$out" | grep -qF "$(VERSION)"; then \
 			echo "verify-release: FAIL — the packaged binary reports \"$$out\", not $(VERSION)."; \
 			echo "  The zip holds a build from another tag (re-run make package)."; rc=1; \
+		elif grep -qaF "$$HOME" "$$tmp/$(BINARY)"; then \
+			echo "verify-release: FAIL — the packaged binary embeds this home directory."; \
+			echo "  It was built without -trimpath (re-run make package)."; rc=1; \
 		else \
 			echo "  $$out"; \
 			spctl -a -vv -t install "$$tmp/$(BINARY)" 2>&1 | head -2 || true; \
@@ -117,8 +125,15 @@ verify-release:
 		want=$$(printf '%s\n' "$(BINARY)" README.md LICENSE | LC_ALL=C sort | tr '\n' ' '); \
 		if [ "$$got" != "$$want" ]; then \
 			echo "verify-release: FAIL — $$f holds $$got; expected $$want"; exit 1; fi; \
+		tmp=$$(mktemp -d); \
+		if ! tar -xzf "$$f" -C "$$tmp" "$(BINARY)"; then \
+			echo "verify-release: FAIL — $$f does not unpack."; rm -rf "$$tmp"; exit 1; fi; \
+		if grep -qaF "$$HOME" "$$tmp/$(BINARY)"; then \
+			echo "verify-release: FAIL — the binary in $$f embeds this home directory."; \
+			echo "  It was built without -trimpath (re-run make package)."; rm -rf "$$tmp"; exit 1; fi; \
+		rm -rf "$$tmp"; \
 	done
-	@echo "verify-release: OK ($(VERSION), notarized, unpacks, runs, reports its version, clean linux archives)"
+	@echo "verify-release: OK ($(VERSION), notarized, unpacks, runs, reports its version, no builder paths, clean linux archives)"
 
 ## clean: Remove build artifacts
 clean:

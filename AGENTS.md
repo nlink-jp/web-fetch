@@ -22,7 +22,7 @@ make build   # → dist/web-fetch  (NEVER `go build` directly — it drops the b
 make test    # go test -race -cover ./...   (fully offline)
 make e2e     # live tests against real sites + the binary-level script (network required)
 make check   # lint + test + build-all
-make verify-release  # gate: notarized, fresh, runs at this version, clean linux archives (run before upload)
+make verify-release  # gate: notarized, fresh, runs at this version, no builder paths, clean linux archives (run before upload)
 ```
 
 Go 1.27. Dependencies: `golang.org/x/net` (html, html/charset) and

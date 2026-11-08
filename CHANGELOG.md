@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Release binaries no longer embed the builder's home directory.** Every
+  `go build` in the Makefile ran without `-trimpath`, so each published
+  binary recorded the absolute paths of the checkout and the module cache —
+  the release machine's login name and directory layout. `make build` and
+  `make build-all` now pass `-trimpath`, and `make verify-release` fails any
+  packaged binary (darwin zip and linux archives) that contains the builder's
+  `$HOME`. Found by the code-audit skill's first run over this repository.
 - **A relative `XDG_CONFIG_HOME` or `HOME` no longer locates the default
   search path.** The XDG Base Directory specification says a relative value
   is invalid and must be ignored; web-fetch joined it as given, so it
