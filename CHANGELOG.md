@@ -4,6 +4,40 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-11-14
+
+### Security
+
+- **`golang.org/x/net` is updated from v0.59.0 to v0.62.0** (GO-2026-6860).
+  The HTML parser took time that grows with the square of a page's size when
+  the page is short text runs separated by end tags the parser ignores
+  (`a</x>` repeated). web-fetch parses whatever page it is pointed at, so such
+  a page could hold a fetch — and the MCP call waiting on it — for as long as
+  its size allowed. Measured: a 4 MiB page took 17 s to parse and now takes
+  0.11 s; the default `max_bytes` is 5 MiB and the largest setting 50 MiB. A
+  test now holds the parser to linear time on that input. GO-2026-6866, in
+  `html.Render`, which web-fetch does not call, is fixed by the same version.
+  `golang.org/x/text` moves from v0.42.0 to v0.43.0.
+
+### Changed
+
+- **Building from source needs Go 1.27.4 or later** (`go.mod`; it was 1.27.1).
+  web-fetch's HTTP client is the standard library's, and it connects to
+  servers the user does not choose. Go 1.27.2 fixed two advisories in the
+  HTTP/2 client (GO-2026-6610, -6611) and Go 1.27.3 one in certificate
+  verification (GO-2026-6809). The released binaries of v0.2.0 were built
+  with Go 1.27.3; the `go` line now refuses an older toolchain.
+- **`make package` runs the vulnerability check first** (`make vuln`), so a
+  release cannot be built past a finding.
+
+### Fixed
+
+- **The live test of example.com no longer fails on the site's own change.**
+  The page dropped the `<h1>` that repeated its title, and the test looked
+  for the title in the body. It now reads the title from the result and
+  holds the body to a phrase of the one paragraph that is left. Nothing in
+  web-fetch's output changed.
+
 ## [0.2.0] - 2026-11-09
 
 ### Fixed

@@ -22,10 +22,11 @@ make build   # → dist/web-fetch  (NEVER `go build` directly — it drops the b
 make test    # go test -race -cover ./...   (fully offline)
 make e2e     # live tests against real sites + the binary-level script (network required)
 make check   # lint + test + build-all
+make vuln            # govulncheck over the build; `make package` runs it first and stops on a finding
 make verify-release  # gate: notarized, fresh, runs at this version, no builder paths or owners, clean linux archives (run before upload)
 ```
 
-Go 1.27. Dependencies: `golang.org/x/net` (html, html/charset) and
+Go 1.27.4 or later. Dependencies: `golang.org/x/net` (html, html/charset) and
 `golang.org/x/text` (charsets) — Go-team modules, treated as first-party under
 the org's supply-chain rule (ADR-0003). Nothing else. Shared code (the release
 scripts, the sectioned-TOML reader, the `internal/mcp` skeleton) is vendored
@@ -214,7 +215,9 @@ this a year from now.
   resolving, the live test skips with a note; name another public loopback
   name here.
 - **`http://go.dev/` → `https://go.dev/` in one hop**, recorded in
-  `redirects`; example.com answers 559 bytes in about 70 ms.
+  `redirects`; example.com answers 559 bytes in about 70 ms. (On 2026-11-14 it
+  answered 577 bytes and its body no longer had the `<h1>`; the live test reads
+  the title and a phrase of the one paragraph instead.)
 - **Known from the consumer side** (lagent source, 2026-09-12): its MCP intake
   cap is 20,000 bytes of text block, compared as `len(text)`; an oversized
   block becomes an 800-rune preview plus a work-directory path.
