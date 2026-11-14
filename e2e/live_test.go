@@ -43,7 +43,11 @@ func TestLiveStablePage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Status != 200 || res.Format != "markdown" || !strings.Contains(res.Text, "Example Domain") {
+	// The page's body no longer repeats its title in an <h1> (seen 2026-11-14:
+	// one paragraph, 577 bytes), so the title is read from where it still is
+	// and the body is held to a phrase of that paragraph.
+	if res.Status != 200 || res.Format != "markdown" || res.Title != "Example Domain" ||
+		!strings.Contains(res.Text, "documentation examples") {
 		t.Errorf("%+v", res)
 	}
 	t.Logf("MEASURED: example.com bytes=%d elapsed_ms=%d total_chars=%d charset=%s/%s title=%q",
