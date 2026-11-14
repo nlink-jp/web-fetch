@@ -124,3 +124,24 @@ func TestLongestRun(t *testing.T) {
 		}
 	}
 }
+
+// TestParsingManyShortTextRunsStaysLinear holds the parser to linear time on
+// the input GO-2026-6860 describes: short text runs separated by end tags the
+// parser ignores. Up to golang.org/x/net v0.61 each run was appended to the
+// previous text node by copying the whole accumulated string. Measured on
+// 2026-11-14 with this 4 MiB page: 17 s on v0.59.0 (25 s under the race
+// detector), 0.11 s on v0.62.0 (1.7 s under the race detector). The default
+// fetch cap is 5 MiB and the largest allowed is 50 MiB, where the old parser
+// would run for the better part of an hour. The limit sits between the two
+// measurements with room on both sides, so it fails on a dependency that has
+// lost the fix and not on a busy machine.
+func TestParsingManyShortTextRunsStaysLinear(t *testing.T) {
+	page := "<body>" + strings.Repeat("a</x>", (4<<20)/5) + "</body>"
+	start := time.Now()
+	if _, err := Extract(page, nil, FormatText); err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if took := time.Since(start); took > 8*time.Second {
+		t.Fatalf("4 MiB of short text runs took %v; the parser is quadratic again (golang.org/x/net below v0.62.0?)", took)
+	}
+}
