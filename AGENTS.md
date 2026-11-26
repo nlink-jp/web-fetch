@@ -76,7 +76,7 @@ internal/fetch/              HTTP client through the guard: redirect inspection,
 internal/cache/              Generic in-process TTL LRU (the MCP page cache)
 internal/engine/             Validation, fetch-or-cache, decode, render, rune paging, the Result shape — shared by CLI and MCP
 internal/app/                CLI shell: dispatch, the URL positional, text/JSON rendering, the MCP fetch tool definition
-internal/mcp/                Zero-dep stdio JSON-RPC 2.0 server (MCP 2025-03-26, tool annotations) + embedded usage.md
+internal/mcp/                Zero-dep stdio JSON-RPC 2.0 server (MCP 2025-11-25 / 2025-06-18 / 2024-11-05, tool annotations; not 2025-03-26 — it requires JSON-RPC batches) + embedded usage.md
 e2e/                         Live tests behind the `e2e` build tag
 docs/{en,ja}/                RFP (the design record) + adr/ (project ADRs, en/ja mirrored)
 scripts/                     Vendored org release scripts (codesign, notarize, brew formula) + e2e.sh

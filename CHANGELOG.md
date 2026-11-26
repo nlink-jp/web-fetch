@@ -13,6 +13,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   build alone, so an advisory in a Linux- or Windows-only package could not
   stop a release.
 
+### Fixed
+
+- **`initialize` no longer names 2025-03-26, a revision the server does not
+  meet.** 2025-03-26 requires accepting JSON-RPC batches, and this server
+  answers a batch with a parse error. The server now answers with the
+  requested revision when it satisfies it (2025-11-25, 2025-06-18 or
+  2024-11-05), and with 2025-11-25 otherwise. Tool annotations are defined in
+  2025-06-18 and later; a 2024-11-05 client ignores the field.
+
 ## [0.2.1] - 2026-11-14
 
 ### Security

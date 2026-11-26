@@ -8,12 +8,31 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"strings"
 )
 
-// protocolVersion is the MCP revision this server speaks. 2025-03-26 is the
-// first with tool annotations.
-const protocolVersion = "2025-03-26"
+// supportedProtocolVersions are the MCP revisions this server satisfies, newest
+// first. 2025-03-26 is left out: it requires accepting JSON-RPC batches, which
+// this server does not. Tool annotations are defined in every listed revision
+// from 2025-06-18; a 2024-11-05 client ignores the field.
+var supportedProtocolVersions = []string{"2025-11-25", "2025-06-18", "2024-11-05"}
+
+// negotiateProtocolVersion answers initialize: the requested revision when the
+// server satisfies it, otherwise the newest one it does.
+func negotiateProtocolVersion(params json.RawMessage) string {
+	var p struct {
+		ProtocolVersion string `json:"protocolVersion"`
+	}
+	if len(params) > 0 {
+		// Malformed params leave the field empty, and the newest revision answers.
+		_ = json.Unmarshal(params, &p)
+	}
+	if slices.Contains(supportedProtocolVersions, p.ProtocolVersion) {
+		return p.ProtocolVersion
+	}
+	return supportedProtocolVersions[0]
+}
 
 // ServerName is what initialize reports.
 const ServerName = "web-fetch"
@@ -143,7 +162,7 @@ func (s *Server) handle(ctx context.Context, req *request) (response, bool) {
 	switch req.Method {
 	case "initialize":
 		return okResponse(req.ID, map[string]any{
-			"protocolVersion": protocolVersion,
+			"protocolVersion": negotiateProtocolVersion(req.Params),
 			"capabilities":    map[string]any{"tools": map[string]any{}},
 			"serverInfo":      map[string]any{"name": ServerName, "version": s.Version},
 			"instructions":    Instructions,
