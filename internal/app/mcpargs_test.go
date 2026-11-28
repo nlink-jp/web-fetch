@@ -71,3 +71,34 @@ func TestEveryToolRefusesAnUndeclaredArgumentByName(t *testing.T) {
 	}
 }
 
+// encoding/json matches names case-insensitively; the schema does not. Every
+// declared argument, spelt with a capital first letter, is refused by name.
+func TestAnArgumentInAnotherCaseIsRefused(t *testing.T) {
+	cl, defs := openTools(t)
+	for _, def := range defs {
+		props, _ := def.InputSchema["properties"].(map[string]any)
+		for prop, spec := range props {
+			other := strings.ToUpper(prop[:1]) + prop[1:]
+			if other == prop {
+				continue
+			}
+			v := `"x"`
+			if m, ok := spec.(map[string]any); ok {
+				switch m["type"] {
+				case "integer", "number":
+					v = "1"
+				case "boolean":
+					v = "true"
+				case "array":
+					v = "[]"
+				case "object":
+					v = "{}"
+				}
+			}
+			msg, isErr := toolMessage(t, cl, def.Name, `{"`+other+`":`+v+`}`)
+			if !isErr || !strings.Contains(msg, `unknown field "`+other+`"`) {
+				t.Errorf("%s accepted %q for %q: %q", def.Name, other, prop, msg)
+			}
+		}
+	}
+}
