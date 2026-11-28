@@ -1,40 +1,21 @@
 package mcp
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"os"
 	"regexp"
-	"slices"
 	"strings"
+
+	"github.com/nlink-jp/mcp"
+	mcpserver "github.com/nlink-jp/mcp/server"
 )
 
-// supportedProtocolVersions are the MCP revisions this server satisfies, newest
-// first. 2025-03-26 is left out: it requires accepting JSON-RPC batches, which
-// this server does not. Tool annotations are defined in every listed revision
-// from 2025-06-18; a 2024-11-05 client ignores the field.
-var supportedProtocolVersions = []string{"2025-11-25", "2025-06-18", "2024-11-05"}
-
-// negotiateProtocolVersion answers initialize: the requested revision when the
-// server satisfies it, otherwise the newest one it does.
-func negotiateProtocolVersion(params json.RawMessage) string {
-	var p struct {
-		ProtocolVersion string `json:"protocolVersion"`
-	}
-	if len(params) > 0 {
-		// Malformed params leave the field empty, and the newest revision answers.
-		_ = json.Unmarshal(params, &p)
-	}
-	if slices.Contains(supportedProtocolVersions, p.ProtocolVersion) {
-		return p.ProtocolVersion
-	}
-	return supportedProtocolVersions[0]
-}
-
-// ServerName is what initialize reports.
+// ServerName is the name the server reports when a client opens it.
 const ServerName = "web-fetch"
 
 // Handler answers one tool call. Arguments arrive as raw JSON so each tool
@@ -54,7 +35,9 @@ type Tool struct {
 	Handle      Handler
 }
 
-// Server is a stdio JSON-RPC 2.0 MCP server.
+// Server serves the tools over stdio. The protocol — both eras, framing,
+// versions, cancellation — is nlink-jp/mcp's (organization ADR-030); this
+// type holds the tools.
 type Server struct {
 	Version string
 	tools   []Tool
@@ -93,168 +76,105 @@ func closeSchema(schema map[string]any) {
 // Tools returns the registered tool definitions, in tools/list order.
 func (s *Server) Tools() []Tool { return s.tools }
 
-// Serve reads newline-delimited JSON-RPC messages until stdin closes.
+// Serve runs the server until stdin reaches EOF (answering every request that
+// arrived), ctx is cancelled, or a write to stdout fails.
 func (s *Server) Serve(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
 	if stdin == nil {
 		return fmt.Errorf("no input stream: the MCP server reads JSON-RPC from stdin")
 	}
-	sc := bufio.NewScanner(stdin)
-	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
-	enc := json.NewEncoder(stdout)
+	ts, err := s.toolServer()
+	if err != nil {
+		return err
+	}
+	return ts.Serve(ctx, stdin, stdout)
+}
 
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" {
-			continue
+// toolServer registers the tools, in tools/list order, on a fresh protocol
+// server; each handler calls callTool. One is built per Serve.
+func (s *Server) toolServer() (*mcpserver.ToolServer, error) {
+	ts, err := mcpserver.New(mcpserver.Info{
+		Server:       mcp.Implementation{Name: ServerName, Version: s.Version},
+		Instructions: Instructions,
+	}, mcpserver.Options{
+		// One call at a time, as before the module: the fetcher's pacing assumes
+		// it.
+		Workers: 1,
+		// Calls sent side by side wait, as they did before the module: the
+		// default of 16 would refuse the 17th as "server busy".
+		QueueDepth: 256,
+		Logger:     slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})),
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, tl := range s.tools {
+		schema, err := json.Marshal(tl.InputSchema)
+		if err != nil {
+			return nil, fmt.Errorf("tool %s: %w", tl.Name, err)
 		}
-		var req request
-		if err := json.Unmarshal([]byte(line), &req); err != nil {
-			// A malformed frame gets a parse error with a null id, per the
-			// JSON-RPC spec. Staying silent would hang the client.
-			if err := enc.Encode(errorResponse(nil, -32700, "parse error: "+err.Error())); err != nil {
-				return err
+		def := mcpserver.Tool{Name: tl.Name, Description: tl.Description, InputSchema: schema}
+		if len(tl.Annotations) > 0 {
+			a, err := json.Marshal(tl.Annotations)
+			if err != nil {
+				return nil, fmt.Errorf("tool %s: %w", tl.Name, err)
 			}
-			continue
+			def.Annotations = a
 		}
-		resp, ok := s.handle(ctx, &req)
-		if !ok {
-			continue // a notification: no reply
-		}
-		if err := enc.Encode(resp); err != nil {
-			return err
+		if err := ts.AddTool(def, s.handle); err != nil {
+			return nil, err
 		}
 	}
-	return sc.Err()
+	return ts, nil
 }
 
-type request struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params"`
-}
-
-type response struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id"`
-	Result  any             `json:"result,omitempty"`
-	Error   *rpcError       `json:"error,omitempty"`
-}
-
-type rpcError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
-
-func errorResponse(id json.RawMessage, code int, msg string) response {
-	return response{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: msg}}
-}
-
-func okResponse(id json.RawMessage, result any) response {
-	return response{JSONRPC: "2.0", ID: id, Result: result}
-}
-
-// handle dispatches one message. The second return value is false for
-// notifications, which must not be answered.
-func (s *Server) handle(ctx context.Context, req *request) (response, bool) {
-	isNotification := len(req.ID) == 0 || string(req.ID) == "null"
-
-	switch req.Method {
-	case "initialize":
-		return okResponse(req.ID, map[string]any{
-			"protocolVersion": negotiateProtocolVersion(req.Params),
-			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo":      map[string]any{"name": ServerName, "version": s.Version},
-			"instructions":    Instructions,
-		}), true
-
-	case "notifications/initialized", "notifications/cancelled":
-		// cancelled is received and ignored: a dispatched fetch completes or
-		// times out on its own. The spec allows a receiver to ignore it in
-		// that case.
-		return response{}, false
-
-	case "ping":
-		return okResponse(req.ID, map[string]any{}), true
-
-	case "tools/list":
-		return okResponse(req.ID, map[string]any{"tools": s.definitions()}), true
-
-	case "tools/call":
-		if isNotification {
-			return response{}, false
-		}
-		return s.callTool(ctx, req), true
-
-	default:
-		if isNotification {
-			return response{}, false
-		}
-		return errorResponse(req.ID, -32601, "method not found: "+req.Method), true
+// handle runs one tools/call: callTool builds the result, and it is copied
+// into the protocol's shape. The protocol layer has already refused an unknown
+// tool and arguments that are not an object, and answers a panic with -32603.
+func (s *Server) handle(ctx context.Context, req *mcpserver.Request) (*mcpserver.Result, error) {
+	res := s.callTool(ctx, req.Name, req.Arguments)
+	out := &mcpserver.Result{IsError: res["isError"] == true}
+	// toolText, toolRawText and toolError build content as []map[string]any;
+	// anything else is a programming error, not an empty success.
+	blocks, ok := res["content"].([]map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("tool %s: result content is %T", req.Name, res["content"])
 	}
-}
-
-func (s *Server) definitions() []map[string]any {
-	out := make([]map[string]any, 0, len(s.tools))
-	for _, t := range s.tools {
-		def := map[string]any{
-			"name":        t.Name,
-			"description": t.Description,
-			"inputSchema": t.InputSchema,
+	for _, b := range blocks {
+		raw, err := json.Marshal(b)
+		if err != nil {
+			return nil, err
 		}
-		if len(t.Annotations) > 0 {
-			def["annotations"] = t.Annotations
-		}
-		out = append(out, def)
+		out.Content = append(out.Content, raw)
 	}
-	return out
+	return out, nil
 }
 
-type callParams struct {
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments"`
-}
-
-func (s *Server) callTool(ctx context.Context, req *request) (resp response) {
-	// A handler that panics must not end the server: it is a long-lived
-	// process whose input is whatever page the model asked for, and a page
-	// that found a bug in the extractor would otherwise take the fetch tool
-	// away until the runtime restarts it (code-audit run-2). The panic
-	// becomes a tool error the model can see; the request after it is
-	// served as usual.
-	defer func() {
-		if r := recover(); r != nil {
-			resp = okResponse(req.ID, toolError(&internalError{cause: fmt.Sprint(r)}))
-		}
-	}()
-	var p callParams
-	if len(req.Params) > 0 {
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return errorResponse(req.ID, -32602, "invalid params: "+err.Error())
-		}
-	}
+// callTool runs one tool by name and wraps its result as tools/call content.
+func (s *Server) callTool(ctx context.Context, name string, args json.RawMessage) map[string]any {
 	// get_usage returns the manual itself, which is Markdown rather than a JSON
 	// document — wrapping it in JSON would only make it harder to read. It
 	// takes no arguments, and says so when handed one.
-	if p.Name == ToolGetUsage {
+	if name == ToolGetUsage {
 		var none struct{}
-		if err := DecodeArgs(p.Arguments, &none); err != nil {
-			return okResponse(req.ID, toolError(err))
+		if err := DecodeArgs(args, &none); err != nil {
+			return toolError(err)
 		}
-		return okResponse(req.ID, toolRawText(UsageDoc()))
+		return toolRawText(UsageDoc())
 	}
-	tool, ok := s.byName[p.Name]
+	tool, ok := s.byName[name]
 	if !ok {
-		return okResponse(req.ID, toolError(ArgErrorf("unknown tool %q; call tools/list for the available tools", p.Name)))
+		// Not reached: the protocol layer refuses a tool it did not register
+		// (-32602), so an unknown tool never reaches the model as a result.
+		return toolError(fmt.Errorf("unknown tool: %s", name))
 	}
-	result, err := tool.Handle(ctx, p.Arguments)
+	result, err := tool.Handle(ctx, args)
 	if err != nil {
 		// Tool failures are results, not protocol errors: the model has to see
 		// them and decide what to do, and a JSON-RPC error would be swallowed
 		// by the client instead.
-		return okResponse(req.ID, toolError(err))
+		return toolError(err)
 	}
-	return okResponse(req.ID, toolText(result))
+	return toolText(result)
 }
 
 // toolText wraps a payload as MCP text content. Structured data is returned as
@@ -282,7 +202,7 @@ func toolError(err error) map[string]any {
 	b, mErr := json.Marshal(StructuredError(err))
 	text := string(b)
 	if mErr != nil {
-		text = `{"code":"internal_error","message":"could not encode the error"}`
+		text = `{"code":"` + CodeInternalError + `","message":"could not encode the error"}`
 	}
 	return map[string]any{
 		"isError": true,
@@ -323,20 +243,10 @@ var (
 // behind the tools, so an agent sees one vocabulary end to end.
 const CodeInvalidArgument = "invalid_argument"
 
-// CodeInternalError is this layer's code for a tool handler that panicked:
-// a defect in the server, not in the call. The message says so; the cause
-// is not shown, because it is the panic value of code that was given the
-// page's bytes, and a line of a stack is of no use to a model.
+// CodeInternalError is this layer's code for an error it could not encode: a
+// defect in the server, not in the call. A tool handler that panics is
+// answered -32603 by the protocol layer (nlink-jp/mcp), which keeps serving.
 const CodeInternalError = "internal_error"
-
-// internalError is the error a recovered handler panic surfaces as.
-type internalError struct{ cause string }
-
-func (e *internalError) Error() string {
-	return "the tool failed on this input (a defect in web-fetch, not in the call); the server is still running"
-}
-func (e *internalError) ErrorCode() string            { return CodeInternalError }
-func (e *internalError) ErrorDetails() map[string]any { return nil }
 
 // ArgError is an argument-validation failure. Argument, when known, names the
 // offending argument and surfaces as details.argument.
@@ -381,3 +291,4 @@ func StructuredError(err error) map[string]any {
 	}
 	return map[string]any{"code": CodeInvalidArgument, "message": err.Error()}
 }
+

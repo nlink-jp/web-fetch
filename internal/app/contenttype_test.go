@@ -26,7 +26,7 @@ func TestRefusedContentTypeIsQuotedInTheToolError(t *testing.T) {
 
 	session := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"fetch","arguments":{"url":"` + srv.URL + `/x"}}}` + "\n"
 	var out, errb strings.Builder
-	if code := run([]string{"mcp"}, "v9", strings.NewReader(session), &out, &errb); code != exitOK {
+	if code := runMCPOverClient(t, []string{"mcp"}, "v9", strings.NewReader(session), &out, &errb); code != exitOK {
 		t.Fatalf("code=%d stderr=%q", code, errb.String())
 	}
 	var resp map[string]any

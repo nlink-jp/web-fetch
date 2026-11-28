@@ -1,9 +1,10 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
-	"strings"
 	"testing"
+	"time"
 
 	"github.com/nlink-jp/web-fetch/internal/config"
 	"github.com/nlink-jp/web-fetch/internal/mcp"
@@ -51,30 +52,26 @@ func TestEveryToolSchemaIsClosed(t *testing.T) {
 // in the tools/list JSON a client actually receives — not just on the Go
 // value, since that is the only copy a client ever validates against.
 func TestClosedSchemaSurvivesTheWire(t *testing.T) {
-	srv := mcp.New("t", tools(config.Defaults(), "t")...)
-	var out strings.Builder
-	if err := srv.Serve(t.Context(),
-		strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`+"\n"), &out); err != nil {
-		t.Fatalf("Serve: %v", err)
+	cl, _ := openTools(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	list, err := cl.ListTools(ctx)
+	if err != nil {
+		t.Fatalf("tools/list: %v", err)
 	}
-	var resp struct {
-		Result struct {
-			Tools []struct {
-				Name   string `json:"name"`
-				Schema struct {
-					AdditionalProperties *bool `json:"additionalProperties"`
-				} `json:"inputSchema"`
-			} `json:"tools"`
-		} `json:"result"`
+	if len(list.Tools) == 0 {
+		t.Fatal("tools/list advertised nothing")
 	}
-	if err := json.Unmarshal([]byte(out.String()), &resp); err != nil {
-		t.Fatalf("decode tools/list %q: %v", out.String(), err)
-	}
-	if len(resp.Result.Tools) == 0 {
-		t.Fatalf("tools/list advertised nothing: %s", out.String())
-	}
-	for _, tl := range resp.Result.Tools {
-		if tl.Schema.AdditionalProperties == nil || *tl.Schema.AdditionalProperties {
+	for _, tl := range list.Tools {
+		var def struct {
+			Schema struct {
+				AdditionalProperties *bool `json:"additionalProperties"`
+			} `json:"inputSchema"`
+		}
+		if err := json.Unmarshal(tl.Raw, &def); err != nil {
+			t.Fatalf("tool %q: %v", tl.Name, err)
+		}
+		if def.Schema.AdditionalProperties == nil || *def.Schema.AdditionalProperties {
 			t.Errorf("tool %q: additionalProperties did not reach the wire as false", tl.Name)
 		}
 	}

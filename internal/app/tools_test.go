@@ -95,7 +95,7 @@ func TestMCPFetchRoundTrip(t *testing.T) {
 		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"fetch","arguments":{"url":"` + srv.URL + `/page","max_chars":1000,"offset":1000}}}` + "\n" +
 		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"fetch","arguments":{"url":"http://127.0.0.1:1/","typo":true}}}` + "\n"
 	var out, errb strings.Builder
-	code := run([]string{"mcp"}, "v9", strings.NewReader(session), &out, &errb)
+	code := runMCPOverClient(t, []string{"mcp"}, "v9", strings.NewReader(session), &out, &errb)
 	if code != exitOK || errb.Len() != 0 {
 		t.Fatalf("code=%d stderr=%q", code, errb.String())
 	}

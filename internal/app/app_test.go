@@ -31,6 +31,16 @@ func runWith(t *testing.T, stdin string, args ...string) (code int, stdout, stde
 	return code, out.String(), errb.String()
 }
 
+// runWithMCP is runWith for an mcp session: the subcommand is opened with
+// nlink-jp/mcp's client and the request lines are replayed through it.
+func runWithMCP(t *testing.T, session string, args ...string) (code int, stdout, stderr string) {
+	t.Helper()
+	isolate(t)
+	var out, errb bytes.Buffer
+	code = runMCPOverClient(t, args, "v9.9.9", strings.NewReader(session), &out, &errb)
+	return code, out.String(), errb.String()
+}
+
 func TestVersionFlagAndSubcommandAreByteIdentical(t *testing.T) {
 	c1, o1, _ := runWith(t, "", "version")
 	c2, o2, _ := runWith(t, "", "--version")
@@ -85,7 +95,7 @@ func TestIsURLRecognisesOnlySchemedArguments(t *testing.T) {
 func TestMCPServesUntilStdinCloses(t *testing.T) {
 	session := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}` + "\n" +
 		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}` + "\n"
-	code, out, errb := runWith(t, session, "mcp")
+	code, out, errb := runWithMCP(t, session, "mcp")
 	if code != exitOK || errb != "" {
 		t.Fatalf("mcp: code=%d stderr=%q", code, errb)
 	}
@@ -116,7 +126,7 @@ func TestMCPRefusesAllowPrivateFromAnExplicitConfig(t *testing.T) {
 	if err := os.WriteFile(loosen, []byte("[network]\nallow_private = true\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	code, out, errb := runWith(t, `{"jsonrpc":"2.0","id":1,"method":"ping"}`+"\n", "mcp", "-c", loosen)
+	code, out, errb := runWithMCP(t, "", "mcp", "-c", loosen)
 	if code != exitError || out != "" || !strings.Contains(errb, "allow_private") {
 		t.Errorf("code=%d stdout=%q stderr=%q", code, out, errb)
 	}

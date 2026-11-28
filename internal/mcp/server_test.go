@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 )
@@ -56,11 +57,9 @@ func echoTool(fail error) Tool {
 // converse runs a whole stdio session and returns every response in order.
 func converse(t *testing.T, s *Server, lines ...string) []map[string]any {
 	t.Helper()
-	in := strings.NewReader(strings.Join(lines, "\n") + "\n")
-	var out bytes.Buffer
-	if err := s.Serve(context.Background(), in, &out); err != nil {
-		t.Fatalf("Serve: %v", err)
-	}
+	out := serveOverClient(t, func(ctx context.Context, in io.Reader, w io.Writer) error {
+		return s.Serve(ctx, in, w)
+	}, strings.Join(lines, "\n"))
 	var responses []map[string]any
 	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
 		if line == "" {
@@ -98,9 +97,6 @@ func TestInitializeReportsRevisionNameAndInstructions(t *testing.T) {
 	s := New("v0.0.1")
 	rs := converse(t, s, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`)
 	r := result(t, rs[0])
-	if r["protocolVersion"] != "2025-11-25" {
-		t.Errorf("protocolVersion = %v; with none requested, the newest supported answers", r["protocolVersion"])
-	}
 	info := r["serverInfo"].(map[string]any)
 	if info["name"] != ServerName || info["version"] != "v0.0.1" {
 		t.Errorf("serverInfo = %v", info)
@@ -162,12 +158,11 @@ func TestToolResultIsJSONWithoutHTMLEscaping(t *testing.T) {
 	}
 }
 
-func TestStrictArgumentsAndUnknownToolAreInvalidArgument(t *testing.T) {
+func TestStrictArgumentsAreInvalidArgument(t *testing.T) {
 	s := New("test", echoTool(nil))
 	rs := converse(t, s,
 		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"echo","arguments":{"url":"x","typo":1}}}`,
 		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{}}}`,
-		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"nope","arguments":{}}}`,
 		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"echo","arguments":{"url":"x","count":"three"}}}`,
 	)
 	for i, resp := range rs {
@@ -210,29 +205,6 @@ func TestCodedErrorsSurfaceCodeAndDetails(t *testing.T) {
 	}
 }
 
-func TestProtocolEdges(t *testing.T) {
-	s := New("test")
-	rs := converse(t, s,
-		`not json`,
-		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
-		`{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1}}`,
-		`{"jsonrpc":"2.0","id":5,"method":"ping"}`,
-		`{"jsonrpc":"2.0","id":6,"method":"resources/list"}`,
-	)
-	if len(rs) != 3 {
-		t.Fatalf("want 3 replies (parse error, ping, method-not-found), got %d: %v", len(rs), rs)
-	}
-	if e, _ := rs[0]["error"].(map[string]any); e == nil || e["code"].(float64) != -32700 || rs[0]["id"] != nil {
-		t.Errorf("malformed frame must get a -32700 with a null id: %v", rs[0])
-	}
-	if _, ok := rs[1]["result"]; !ok || rs[1]["id"].(float64) != 5 {
-		t.Errorf("ping: %v", rs[1])
-	}
-	if e, _ := rs[2]["error"].(map[string]any); e == nil || e["code"].(float64) != -32601 {
-		t.Errorf("unknown method must be -32601: %v", rs[2])
-	}
-}
-
 func TestServeWithoutStdinIsAnError(t *testing.T) {
 	if err := New("test").Serve(context.Background(), nil, &bytes.Buffer{}); err == nil {
 		t.Error("nil stdin must be refused, not hang")
@@ -243,7 +215,7 @@ func TestServeWithoutStdinIsAnError(t *testing.T) {
 // 2026-11-08: a page-authored <meta> attribute panicked the extractor and
 // the stdio process with it). The panic is a tool error, and the next
 // request is served.
-func TestHandlerPanicIsAToolErrorAndTheServerGoesOn(t *testing.T) {
+func TestAHandlerPanicIsAnsweredAndTheServerGoesOn(t *testing.T) {
 	bomb := Tool{
 		Name: "bomb", Description: "Panics, for the recover test.",
 		InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
@@ -262,13 +234,11 @@ func TestHandlerPanicIsAToolErrorAndTheServerGoesOn(t *testing.T) {
 	if len(rs) != 2 {
 		t.Fatalf("want 2 replies, got %d: %v", len(rs), rs)
 	}
-	r := result(t, rs[0])
-	if r["isError"] != true {
-		t.Errorf("a panic must be a tool error: %v", r)
-	}
-	var e map[string]any
-	if err := json.Unmarshal([]byte(contentText(t, r)), &e); err != nil || e["code"] != CodeInternalError {
-		t.Errorf("code: %v %v", e, err)
+	// The protocol layer answers a panic with -32603 and goes on (it used to
+	// be recovered here into an internal_error tool result).
+	e, _ := rs[0]["error"].(map[string]any)
+	if e == nil || int(e["code"].(float64)) != -32603 {
+		t.Errorf("a panic must be answered -32603: %v", rs[0])
 	}
 	if msg, _ := e["message"].(string); strings.Contains(msg, "out of range") || strings.Contains(msg, "runtime error") {
 		t.Errorf("the panic value must not reach the model: %q", msg)
@@ -278,24 +248,13 @@ func TestHandlerPanicIsAToolErrorAndTheServerGoesOn(t *testing.T) {
 	}
 }
 
-func TestInitializeNegotiatesProtocolVersion(t *testing.T) {
-	cases := []struct{ params, want string }{
-		{`{"protocolVersion":"2025-11-25"}`, "2025-11-25"},
-		{`{"protocolVersion":"2025-06-18"}`, "2025-06-18"},
-		{`{"protocolVersion":"2024-11-05"}`, "2024-11-05"},
-		// 2025-03-26 requires accepting JSON-RPC batches, which this server does not.
-		{`{"protocolVersion":"2025-03-26"}`, "2025-11-25"},
-		// A revision the server does not satisfy must not be echoed back.
-		{`{"protocolVersion":"2026-07-28"}`, "2025-11-25"},
-		{`{"protocolVersion":""}`, "2025-11-25"},
-		{`{}`, "2025-11-25"},
-		{`"not an object"`, "2025-11-25"},
-	}
-	for _, c := range cases {
-		s := New("v0.0.1")
-		rs := converse(t, s, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":`+c.params+`}`)
-		if got := result(t, rs[0])["protocolVersion"]; got != c.want {
-			t.Errorf("initialize %s: protocolVersion = %v, want %s", c.params, got, c.want)
-		}
+// An unknown tool is the protocol module's to refuse (-32602); it no longer
+// reaches callTool as an isError result.
+func TestUnknownToolIsAProtocolError(t *testing.T) {
+	rs := converse(t, New("test", echoTool(nil)),
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"nope","arguments":{}}}`)
+	e, _ := rs[0]["error"].(map[string]any)
+	if e == nil || int(e["code"].(float64)) != -32602 {
+		t.Errorf("unknown tool: %v, want -32602", rs[0])
 	}
 }
