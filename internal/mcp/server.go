@@ -188,7 +188,7 @@ func toolText(v any) map[string]any {
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(v); err != nil {
-		return toolError(fmt.Errorf("encode result: %w", err))
+		return toolError(&encodeError{err: err})
 	}
 	return map[string]any{
 		"content": []map[string]any{{"type": "text", "text": strings.TrimRight(buf.String(), "\n")}},
@@ -251,13 +251,13 @@ var (
 	badField     = regexp.MustCompile(`Go struct field [^.]+\.([A-Za-z0-9_]+)`)
 )
 
-// CodeInvalidArgument is this layer's own error code — an unknown tool, an
-// unknown or mistyped argument. Every other code comes from the packages
+// CodeInvalidArgument is this layer's own error code — an unknown or
+// mistyped argument. Every other code comes from the packages
 // behind the tools, so an agent sees one vocabulary end to end.
 const CodeInvalidArgument = "invalid_argument"
 
-// CodeInternalError is this layer's code for an error it could not encode: a
-// defect in the server, not in the call. A tool handler that panics is
+// CodeInternalError is this layer's code for a result or an error it could
+// not encode: a defect in the server, not in the call. A tool handler that panics is
 // answered -32603 by the protocol layer (nlink-jp/mcp), which keeps serving.
 const CodeInternalError = "internal_error"
 
@@ -364,3 +364,11 @@ func argNames(into any) func(string) bool {
 		return false
 	}
 }
+
+// encodeError is a result this layer could not encode: a defect in the
+// server, not in the call, so it is not reported as an argument error.
+type encodeError struct{ err error }
+
+func (e *encodeError) Error() string                { return "encode result: " + e.err.Error() }
+func (e *encodeError) ErrorCode() string            { return CodeInternalError }
+func (e *encodeError) ErrorDetails() map[string]any { return nil }

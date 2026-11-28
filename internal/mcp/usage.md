@@ -83,7 +83,7 @@ A tool failure is a result (`isError: true`) whose text is one JSON object:
 
 | code | meaning | recovery |
 |---|---|---|
-| `invalid_argument` | an unknown tool, or an argument that is missing, unknown, mistyped or out of range | fix the call; `details.argument` names it, `details.allowed` the accepted values or range |
+| `invalid_argument` | an argument that is missing, unknown, mistyped or out of range | fix the call; `details.argument` names it, `details.allowed` the accepted values or range |
 | `invalid_url` | malformed, no host, or `user:password@` — in the input, or in a redirect target (`details.hop`) | correct the URL; a redirect into credentials is never followed, stop there |
 | `scheme_not_allowed` | not http / https — in the input or a redirect target (`details.hop`) | only http and https are fetched; there is no other scheme to try |
 | `address_not_allowed` | the host resolves to a loopback, private, link-local, unique-local, multicast, shared or reserved address (`details.class`, `details.address`; `details.via` names an IPv6 embedding when one was unwrapped) | this server does not reach such addresses; do not retry with a different spelling of the same host. An operator may set `[network] allow_private = true` in the global config |
@@ -95,7 +95,7 @@ A tool failure is a result (`isError: true`) whose text is one JSON object:
 | `too_large` | the decoded body passed the byte cap (`details.max_bytes`), or its rendering passed the render budget (`details.render_limit`: nested blocks multiplied the text far past what was fetched) | nothing is truncated: the page is larger than this server reads. Only an operator can raise `max_bytes`; a page refused for its rendering is not readable here in `markdown` or `text` — `format: raw` returns its bytes as fetched |
 | `unsupported_content_type` | PDF, image, binary or an unknown media type (`details.content_type`), or a non-gzip `Content-Encoding` (`details.content_encoding`) | this server extracts HTML, text and JSON only |
 | `charset_unsupported` | the page declares a charset the decoder table does not know (`details.charset`) | try `format: raw` only if the bytes might be ASCII; otherwise the page is not readable here |
-| `internal_error` | the server could not encode a tool's error — a defect in web-fetch, not in the call; the server is still running | do not retry the same call; other calls are unaffected. (A tool that fails on a page's bytes is answered with JSON-RPC error -32603 and the server goes on.) |
+| `internal_error` | the server could not encode a tool's result or error — a defect in web-fetch, not in the call; the server is still running | do not retry the same call; other calls are unaffected. (A tool that fails on a page's bytes is answered with JSON-RPC error -32603 and the server goes on.) |
 
 ## Reach
 
