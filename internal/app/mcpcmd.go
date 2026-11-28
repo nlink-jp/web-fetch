@@ -3,12 +3,19 @@ package app
 import (
 	"context"
 	"io"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/nlink-jp/web-fetch/internal/config"
 	"github.com/nlink-jp/web-fetch/internal/mcp"
 )
 
-// runMCP serves the stdio MCP server until stdin closes.
+// notifyContext is signal.NotifyContext; a test stands in for the signal.
+var notifyContext = signal.NotifyContext
+
+// runMCP serves the stdio MCP server until stdin closes, answering every
+// request that arrived, or until SIGINT or SIGTERM.
 func runMCP(args []string, version string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var configPath string
 	fs := newFlagSet("mcp", stderr)
@@ -31,7 +38,11 @@ func runMCP(args []string, version string, stdin io.Reader, stdout, stderr io.Wr
 	}
 
 	srv := mcp.New(version, tools(cfg, version)...)
-	if err := srv.Serve(context.Background(), stdin, stdout); err != nil {
+	// SIGINT and SIGTERM cancel the server's ctx: it returns at once and its
+	// cleanup runs (server-migration §2).
+	ctx, stop := notifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := srv.Serve(ctx, stdin, stdout); err != nil {
 		return fail(stderr, exitError, "mcp: %v", err)
 	}
 	return exitOK
