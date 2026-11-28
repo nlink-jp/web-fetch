@@ -36,21 +36,38 @@ func runMCPOverClient(t *testing.T, args []string, version string, stdin io.Read
 		_ = outW.Close()
 	}()
 	kill := func() { _ = inW.Close(); _ = outR.Close() }
+	// Whatever ends the test, nothing is left running: closing the pipes
+	// ends the subcommand's reads and writes.
+	t.Cleanup(kill)
 	conn, err := client.NewLineConn(outR, inW, kill, client.LineOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	octx, ocancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer ocancel()
-	cl, err := client.Open(octx, conn, client.Options{Client: mcp.Implementation{Name: "test", Version: "0"}})
-	if err != nil {
+	type opened struct {
+		cl  *client.Client
+		err error
+	}
+	openCh := make(chan opened, 1)
+	go func() {
+		c, err := client.Open(octx, conn, client.Options{Client: mcp.Implementation{Name: "test", Version: "0"}})
+		openCh <- opened{c, err}
+	}()
+	var cl *client.Client
+	select {
+	case code := <-done:
+		// The subcommand ended before it could be opened (a refused config):
+		// that exit is the answer, and stdout stays empty.
 		kill()
-		select {
-		case code := <-done:
-			return code
-		case <-time.After(5 * time.Second):
-			t.Fatalf("open: %v", err)
+		return code
+	case o := <-openCh:
+		if o.err != nil {
+			kill()
+			code := <-done
+			t.Fatalf("open: %v (the subcommand exited %d)", o.err, code)
 		}
+		cl = o.cl
 	}
 	sc := bufio.NewScanner(bytes.NewReader(input))
 	sc.Buffer(make([]byte, 64<<10), 16<<20)

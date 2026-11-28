@@ -102,3 +102,33 @@ func TestAnArgumentInAnotherCaseIsRefused(t *testing.T) {
 		}
 	}
 }
+
+// Every tool's annotations reach tools/list as the tool declares them: the
+// readOnlyHint and openWorldHint a client decides on are not lost on the way
+// to the module.
+func TestToolAnnotationsReachTheWire(t *testing.T) {
+	cl, defs := openTools(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	list, err := cl.ListTools(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]map[string]any{}
+	for _, tl := range list.Tools {
+		var def struct {
+			Annotations map[string]any `json:"annotations"`
+		}
+		if err := json.Unmarshal(tl.Raw, &def); err != nil {
+			t.Fatal(err)
+		}
+		got[tl.Name] = def.Annotations
+	}
+	for _, def := range defs {
+		want, _ := json.Marshal(def.Annotations)
+		have, _ := json.Marshal(got[def.Name])
+		if len(def.Annotations) == 0 || string(want) != string(have) {
+			t.Errorf("%s: annotations on the wire %s, declared %s", def.Name, have, want)
+		}
+	}
+}
