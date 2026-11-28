@@ -36,7 +36,7 @@
 5. **取り消し（方針 §5）**: `notifications/cancelled` で呼び出しの ctx が取り消されるようになる。取り消された呼び出しは取得を止める（ハンドラの ctx が終わることを試験で確かめた）。ディスクには何も保存しない。
 6. **シグナル（方針 §2）**: `mcp` サブコマンドは、SIGINT と SIGTERM で取り消される ctx を `Serve` に渡す。
 7. **依存と版**: `github.com/nlink-jp/mcp` を足す。minor を上げる（v0.3.0）。
-8. **panic（方針 §4）**: ツールのハンドラの panic には、モジュールが -32603 で答え、サーバは動き続ける。isError の `internal_error` を返していた `callTool` 自身の recover は外す。`internal_error` は、この層が符号化できない誤りのために残す。
+8. **panic（方針 §4）**: ツールのハンドラの panic には、モジュールが -32603 で答え、サーバは動き続ける。isError の `internal_error` を返していた `callTool` 自身の recover は外す。`internal_error` は、この層が符号化できない結果や誤りのために残す。
 
 ## 見つけた不具合（それぞれ別の fix コミットで直した）
 

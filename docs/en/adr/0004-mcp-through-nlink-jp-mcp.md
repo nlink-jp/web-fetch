@@ -41,7 +41,7 @@ Follow the common policy (nlink-jp/mcp's `docs/en/server-migration.md`, v0.3.0) 
 5. **Cancellation (policy §5)**: `notifications/cancelled` now cancels the call's ctx. A cancelled call stops its fetch (a test pins that the handler's ctx ends); nothing is stored on disk.
 6. **Signals (policy §2)**: the `mcp` subcommand passes `Serve` a ctx cancelled by SIGINT and SIGTERM.
 7. **Dependency and version**: `github.com/nlink-jp/mcp` is added; minor (v0.3.0).
-8. **Panics (policy §4)**: a tool handler that panics is answered -32603 by the module, which keeps serving; `callTool`'s own recover, which returned an isError `internal_error` result, goes. `internal_error` stays for an error the layer cannot encode.
+8. **Panics (policy §4)**: a tool handler that panics is answered -32603 by the module, which keeps serving; `callTool`'s own recover, which returned an isError `internal_error` result, goes. `internal_error` stays for a result or an error the layer cannot encode.
 
 ## Defects found (each fixed in its own fix commit)
 
