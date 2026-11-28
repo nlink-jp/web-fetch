@@ -83,12 +83,15 @@ out=$(printf '%s\n' "$session" | "$BIN" mcp 2>/dev/null); got=$?
 if [ "$got" = 0 ]; then ok "mcp exits 0 when stdin closes"; else bad "mcp exit $got"; fi
 lines=$(printf '%s\n' "$out" | grep -c .)
 if [ "$lines" = 5 ]; then ok "five replies for five requests (notification unanswered)"; else bad "reply count $lines"; fi
-printf '%s\n' "$out" | sed -n 1p | grep -q '"protocolVersion":"2025-03-26"' && ok "initialize reports 2025-03-26" || bad "initialize"
-printf '%s\n' "$out" | sed -n 2p | grep -q '"openWorldHint":true' && ok "fetch carries openWorldHint" || bad "annotations"
-printf '%s\n' "$out" | sed -n 3p | grep -q 'Example Domain' && ok "fetch returns the page" || bad "fetch result"
-printf '%s\n' "$out" | sed -n 3p | grep -q '\\"cache\\": \\"miss\\"' && ok "fetch result reports cache miss" || bad "cache field"
-printf '%s\n' "$out" | sed -n 4p | grep -q 'address_not_allowed' && ok "loopback refused over MCP" || bad "mcp refusal"
-printf '%s\n' "$out" | sed -n 5p | grep -q 'web-fetch — MCP reference' && ok "get_usage returns the manual" || bad "get_usage"
+# reply N prints the answer whose id is N: answers are matched by id, as an
+# MCP client matches them, not by their position in the output.
+reply() { printf '%s\n' "$out" | grep -E "^\{\"jsonrpc\":\"2.0\",\"id\":$1[,}]"; }
+reply 1 | grep -q '"protocolVersion":"2025-11-25"' && ok "initialize reports 2025-11-25 (none requested)" || bad "initialize"
+reply 2 | grep -q '"openWorldHint":true' && ok "fetch carries openWorldHint" || bad "annotations"
+reply 3 | grep -q 'Example Domain' && ok "fetch returns the page" || bad "fetch result"
+reply 3 | grep -q '\\"cache\\": \\"miss\\"' && ok "fetch result reports cache miss" || bad "cache field"
+reply 4 | grep -q 'address_not_allowed' && ok "loopback refused over MCP" || bad "mcp refusal"
+reply 5 | grep -q 'web-fetch — MCP reference' && ok "get_usage returns the manual" || bad "get_usage"
 
 echo
 echo "passed $pass, failed $fail"
