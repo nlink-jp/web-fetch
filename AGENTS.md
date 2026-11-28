@@ -76,7 +76,7 @@ internal/fetch/              HTTP client through the guard: redirect inspection,
 internal/cache/              Generic in-process TTL LRU (the MCP page cache)
 internal/engine/             Validation, fetch-or-cache, decode, render, rune paging, the Result shape — shared by CLI and MCP
 internal/app/                CLI shell: dispatch, the URL positional, text/JSON rendering, the MCP fetch tool definition
-internal/mcp/                Zero-dep stdio JSON-RPC 2.0 server (MCP 2025-11-25 / 2025-06-18 / 2024-11-05, tool annotations; not 2025-03-26 — it requires JSON-RPC batches) + embedded usage.md
+internal/mcp/                MCP tools on nlink-jp/mcp's server.ToolServer (both eras, tool annotations; ADR-0004) + embedded usage.md
 e2e/                         Live tests behind the `e2e` build tag
 docs/{en,ja}/                RFP (the design record) + adr/ (project ADRs, en/ja mirrored)
 scripts/                     Vendored org release scripts (codesign, notarize, brew formula) + e2e.sh
@@ -164,10 +164,11 @@ code trips over.
   final URL, so it takes the same `inertJSON` on a terminal, and `fail`'s
   line takes `inert` (code-audit run-2). Tests drive both through a writer
   with a `Stat()` that reports a character device.
-- **A tool handler that panics answers `internal_error`, not a dead
-  server.** `mcp.callTool` recovers, returns an `isError` result whose
-  message names a defect in web-fetch (the panic value stays out of it) and
-  serves the next request. It is the second layer: the first is that the
+- **A tool handler that panics is answered, not a dead server.** The
+  protocol layer (nlink-jp/mcp) recovers, answers JSON-RPC error -32603
+  "internal error" (the panic value stays out of it) and serves the next
+  request (ADR-0004; it used to be an `isError` `internal_error` result from
+  `mcp.callTool`). It is the second layer: the first is that the
   extractor must not panic on page bytes — the charset prescan once did,
   because `strings.ToLower` changes byte offsets on invalid UTF-8 and some
   runes; `charsetFromContent` folds ASCII only now (code-audit run-2).
@@ -196,6 +197,15 @@ and the lagent round trip measured (Gotchas). Not yet: the first release,
 util-series integration, the mcp-tactics entry, the knowledge feed-back.
 
 ## Gotchas
+
+- **The MCP protocol is nlink-jp/mcp's** (ADR-0004, organization ADR-030 §6).
+  `internal/mcp` never handles `initialize` or `server/discover` itself: `Serve`
+  registers `Tools()` on a `server.ToolServer` and each handler calls
+  `callTool`. Tests replay their requests through the module's `client`
+  (`clienttest_test.go`) and run its three probe clients; do not write the
+  handshake by hand in a test. Before initialize, `tools/*` is -32602 — the
+  module's rule, not a defect. Argument names are matched exactly
+  (`DecodeArgs`, `argNames`).
 
 Measured live on 2026-09-12 (`make e2e`). Re-verify before trusting any of
 this a year from now.

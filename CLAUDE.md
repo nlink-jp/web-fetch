@@ -38,7 +38,7 @@ internal/fetch/         HTTP client through the guard; redirect inspection; deco
 internal/cache/         Generic in-process TTL LRU (MCP page cache)
 internal/engine/        Validation, fetch-or-cache, decode, render, rune paging, Result — shared by CLI and MCP
 internal/app/           Dispatch, URL positional, text/JSON rendering, the MCP fetch tool
-internal/mcp/           Zero-dep stdio JSON-RPC 2.0 server (2025-11-25 / 2025-06-18 / 2024-11-05, annotations); embedded get_usage manual
+internal/mcp/           MCP tools on nlink-jp/mcp's server.ToolServer (both eras, annotations; ADR-0004); embedded get_usage manual
 e2e/                    Live tests behind the `e2e` build tag
 ```
 

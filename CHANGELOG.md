@@ -6,6 +6,45 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **The MCP server speaks both eras of the protocol** (ADR-0004): the
+  2026-07-28 revision, whose clients probe with `server/discover`, as well as
+  the earlier `initialize` handshake (2025-11-25, 2025-06-18, 2024-11-05). The
+  protocol layer is now the organization's shared module nlink-jp/mcp
+  (organization ADR-030); the tools, their arguments and their results are
+  unchanged.
+
+### Changed
+
+- An unknown tool is now refused by the protocol (-32602) rather than returned
+  as an `invalid_argument` tool result naming the tool.
+- Protocol details now follow the module:
+  - `tools/list`, `tools/call` and unknown methods before `initialize` are
+    refused with -32602 (an unknown method was -32601);
+  - `arguments` that is not an object is refused with -32602;
+  - a request with `"id":null` gets -32600 (a `tools/call` with a null id was
+    taken for a notification and not answered), and so does one without
+    `"jsonrpc":"2.0"`;
+  - a batch gets -32600 (it was a parse error);
+  - a line over 16 MiB gets -32600 and reading goes on (it ended the server
+    with an error);
+  - a panic in a tool is answered -32603 by the module and the server goes on
+    (it was an isError `internal_error` result from `callTool`'s own recover);
+  - up to 256 calls wait behind a running one; more are refused with -32603
+    "server busy";
+  - `notifications/cancelled` now cancels the call.
+    A cancelled call stops its fetch (a test pins that the handler's ctx
+    ends); nothing is stored on disk.
+
+  Requests piped in are still all answered before the server exits at end of
+  input.
+
+### Fixed
+
+- An argument spelt in another case (`{"URL": ...}`) was accepted as the declared one; it is now refused by name.
+- SIGINT or SIGTERM ended the MCP server by killing the process; a signal now ends it through its context, so its cleanup runs.
+
 ## [0.2.2] - 2026-11-27
 
 ### Changed
