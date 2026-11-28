@@ -239,7 +239,7 @@ func DecodeArgs(raw json.RawMessage, into any) error {
 		declared := argNames(into)
 		for n := range names {
 			if !declared(n) {
-				return ArgErrorf("json: unknown field %q", n)
+				return &ArgError{Msg: fmt.Sprintf("json: unknown field %q", n), Argument: n}
 			}
 		}
 	}

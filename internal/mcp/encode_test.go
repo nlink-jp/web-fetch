@@ -24,3 +24,17 @@ func TestAnUnencodableResultIsAnInternalError(t *testing.T) {
 		t.Errorf("code = %q (%v), want %s", e.Code, err, CodeInternalError)
 	}
 }
+
+// A declared argument spelt in another case is refused like an undeclared
+// one, naming it in details.argument as usage.md promises.
+func TestAnArgumentInAnotherCaseIsNamedInDetails(t *testing.T) {
+	var into struct {
+		URL string `json:"url"`
+	}
+	err := DecodeArgs(json.RawMessage(`{"URL":"x"}`), &into)
+	got := StructuredError(err)
+	d, _ := got["details"].(map[string]any)
+	if got["code"] != CodeInvalidArgument || d["argument"] != "URL" {
+		t.Errorf("error = %v, want invalid_argument naming URL", got)
+	}
+}
