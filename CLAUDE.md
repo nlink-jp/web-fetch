@@ -22,9 +22,10 @@ make e2e         # live tests + binary-level script (network required)
 make check       # lint + test + build-all
 ```
 
-Go 1.27.4 or later. Dependencies: `golang.org/x/net` and `golang.org/x/text` only (Go
-team; first-party under the org's supply-chain rule, ADR-0003). Nothing else —
-no community HTML-to-markdown or readability library, ever.
+Go 1.27.4 or later. Dependencies: `golang.org/x/net` and `golang.org/x/text` (Go
+team; first-party under the org's supply-chain rule, ADR-0003) and the
+organization's own `github.com/nlink-jp/mcp` (organization ADR-030; ADR-0004).
+Nothing else — no community HTML-to-markdown or readability library, ever.
 
 ## Architecture
 

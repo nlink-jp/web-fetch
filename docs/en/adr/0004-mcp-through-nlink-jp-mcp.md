@@ -32,8 +32,9 @@ Follow the common policy (nlink-jp/mcp's `docs/en/server-migration.md`, v0.3.0) 
    - `tools/*` and unknown methods before initialize are -32602 (an unknown method was -32601), and so are
      `arguments` that is not an object.
    - A request with `"id":null` gets -32600 (a `tools/call` with a null id was taken for a notification and not
-     answered); so does a request without `"jsonrpc"`.
-   - A batch gets -32600 (it was a parse error). A line over 16 MiB gets -32600 and reading goes on (it ended the
+     answered, and `initialize`, `ping` and `tools/list` were answered with a null id); so does a request without
+     `"jsonrpc"`.
+   - A batch gets -32600 (it was a parse error); a parse error is answered "parse error" without the decoder's detail. A line over 16 MiB gets -32600 and reading goes on (it ended the
      server with an error).
    - A panic in a tool is answered -32603 by the module and the server goes on (it was an isError `internal_error` result from `callTool`'s own recover); up to 256 calls wait, more get -32603 "server busy".
    - The legacy negotiation (2025-11-25, 2025-06-18, 2024-11-05) is the module's now, and the modern era is added.
@@ -46,6 +47,7 @@ Follow the common policy (nlink-jp/mcp's `docs/en/server-migration.md`, v0.3.0) 
 
 - An argument spelt in another case (`{"URL": ...}`) was accepted as the declared one; it is now refused by name.
 - SIGINT or SIGTERM ended the MCP server by killing the process; a signal now ends it through its context, so its cleanup runs.
+- A result the server could not encode was reported as the caller's argument error; it is now `internal_error`.
 
 ## Consequences
 

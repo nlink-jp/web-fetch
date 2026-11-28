@@ -28,9 +28,10 @@ make verify-release  # gate: notarized, fresh, runs at this version, no builder 
 
 Go 1.27.4 or later. Dependencies: `golang.org/x/net` (html, html/charset) and
 `golang.org/x/text` (charsets) — Go-team modules, treated as first-party under
-the org's supply-chain rule (ADR-0003). Nothing else. Shared code (the release
-scripts, the sectioned-TOML reader, the `internal/mcp` skeleton) is vendored
-from brave-search rather than imported.
+the org's supply-chain rule (ADR-0003) — and the organization's own module
+`github.com/nlink-jp/mcp` for the MCP protocol (organization ADR-030;
+ADR-0004). Nothing else. Other shared code (the release scripts, the
+sectioned-TOML reader) is vendored from brave-search rather than imported.
 
 ## Tests
 

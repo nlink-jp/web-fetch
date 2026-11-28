@@ -24,9 +24,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     refused with -32602 (an unknown method was -32601);
   - `arguments` that is not an object is refused with -32602;
   - a request with `"id":null` gets -32600 (a `tools/call` with a null id was
-    taken for a notification and not answered), and so does one without
+    taken for a notification and not answered, and `initialize`, `ping` and
+    `tools/list` were answered with a null id), and so does one without
     `"jsonrpc":"2.0"`;
-  - a batch gets -32600 (it was a parse error);
+  - a batch gets -32600 (it was a parse error); a parse error is answered
+    "parse error" without the decoder's detail;
   - a line over 16 MiB gets -32600 and reading goes on (it ended the server
     with an error);
   - a panic in a tool is answered -32603 by the module and the server goes on
@@ -44,6 +46,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - An argument spelt in another case (`{"URL": ...}`) was accepted as the declared one; it is now refused by name.
 - SIGINT or SIGTERM ended the MCP server by killing the process; a signal now ends it through its context, so its cleanup runs.
+- A result the server could not encode was reported as the caller's argument error; it is now `internal_error`.
 
 ## [0.2.2] - 2026-11-27
 
